@@ -74,15 +74,17 @@ export default function NewLayoutPage() {
       setError(insertErr.message);
       setLoading(false);
     } else {
-      router.push(`/project/${params.id}/layout/${data.id}/edit`);
+      // New layouts start in setup phase: boundary + centre + chakra + save
+      router.push(`/project/${params.id}/layout/${data.id}/setup`);
     }
   }
 
   return (
     <div className="mx-auto max-w-xl">
-      <h1 className="text-2xl font-bold">Upload Layout</h1>
+      <h1 className="text-2xl font-bold">Upload your map</h1>
       <p className="mt-1 text-sm text-text-muted">
-        Upload a floor plan image to begin your Vastu analysis.
+        Choose your floor plan image (PNG, JPG, WEBP). This becomes the map you mark in
+        the editor.
       </p>
 
       <form onSubmit={handleSubmit} className="mt-8 space-y-5">
@@ -96,7 +98,7 @@ export default function NewLayoutPage() {
 
         <div>
           <label className="text-sm font-medium text-text-muted">
-            Floor Plan Image *
+            Map image *
           </label>
           <div
             onClick={() => fileRef.current?.click()}

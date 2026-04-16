@@ -2,6 +2,12 @@ export type ProjectType = "residential" | "commercial" | "industrial" | "temple"
 export type ProjectStatus = "in_progress" | "completed" | "archived";
 export type MarkerKind = "activity" | "utility" | "object";
 export type Verdict = "good" | "bad" | "neutral";
+/**
+ * Two-phase layout workflow:
+ * - 'setup': upload + mark boundary + take centre + apply chakra + save
+ * - 'full':  full toolbox (devta, mark objects, PDF, etc.)
+ */
+export type WorkspacePhase = "setup" | "full";
 
 export interface Point {
   x: number;
@@ -42,8 +48,15 @@ export interface Layout {
   center: Point;
   north_degrees: number;
   viewport: { x: number; y: number; scale: number } | null;
+  workspace_phase: WorkspacePhase;
   created_at: string;
   updated_at: string;
+}
+
+/** Optional rectangular selection (size) stored alongside a marker. */
+export interface MarkerSize {
+  w: number;
+  h: number;
 }
 
 export interface LayoutMarker {
@@ -53,6 +66,8 @@ export interface LayoutMarker {
   kind: MarkerKind;
   label: string;
   position: Point;
+  /** Rectangular selection size in normalized coords; center = position. */
+  size?: MarkerSize;
   verdict: Verdict;
   remedy: string;
   notes: string;
@@ -109,7 +124,7 @@ export const MARKER_TAXONOMY: Record<MarkerKind, string[]> = {
 export const VASTU_TOOLS = [
   { key: "vastu-chakra", label: "Vastu Chakra", enabled: true },
   { key: "measurement", label: "Measurement", enabled: false },
-  { key: "devta-marking", label: "Devta Marking", enabled: false },
+  { key: "devta-marking", label: "Devta Marking", enabled: true },
   { key: "marma-marking", label: "Marma Marking", enabled: false },
   { key: "body-part-marking", label: "Body Part Marking", enabled: false },
   { key: "prakriti-marking", label: "Prakriti Marking", enabled: false },

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import type { Project, Layout } from "@/types/database";
-import { Plus, FileText, Pencil } from "lucide-react";
+import { Plus, FileText, Pencil, Upload } from "lucide-react";
 import { DeleteLayoutButton } from "./DeleteLayoutButton";
 import { ProjectDetailsForm } from "./ProjectDetailsForm";
 
@@ -64,45 +64,80 @@ export default async function ProjectDetailPage({
       {/* Layouts and Kundlis sections */}
       <div className="mt-8 grid gap-8 lg:grid-cols-2">
         <section>
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold">
-              Vastu Layouts ({safeLayouts.length})
-            </h2>
-            <Link
-              href={`/project/${id}/layout/new`}
-              className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-white hover:bg-accent-dark"
-            >
-              <Plus size={16} />
-            </Link>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold">
+                Vastu Layouts ({safeLayouts.length})
+              </h2>
+              <p className="mt-1 text-sm text-text-muted">
+                Upload a floor plan image (your map) to draw boundaries and overlay the
+                Shakti Chakra.
+              </p>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <Link
+                href={`/project/${id}/layout/new`}
+                className="inline-flex items-center gap-2 rounded-lg bg-accent px-3 py-2 text-sm font-medium text-white hover:bg-accent-dark"
+              >
+                <Upload size={16} />
+                Upload map
+              </Link>
+              <Link
+                href={`/project/${id}/layout/new`}
+                className="flex h-9 w-9 items-center justify-center rounded-lg border border-accent/30 text-accent hover:bg-accent/10"
+                title="Add another layout"
+              >
+                <Plus size={18} />
+              </Link>
+            </div>
           </div>
           {safeLayouts.length === 0 ? (
-            <p className="mt-4 text-sm text-text-muted">
-              No layouts yet. Add one to start your Vastu analysis.
-            </p>
+            <div className="mt-4 rounded-xl border border-dashed border-surface-border bg-surface-dim/50 p-6 text-center">
+              <p className="text-sm text-text-muted">
+                No floor plan uploaded yet.
+              </p>
+              <Link
+                href={`/project/${id}/layout/new`}
+                className="mt-3 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-dark"
+              >
+                <Upload size={16} />
+                Upload floor plan
+              </Link>
+            </div>
           ) : (
             <ul className="mt-3 space-y-2">
-              {safeLayouts.map((l) => (
-                <li
-                  key={l.id}
-                  className="flex items-center justify-between rounded-lg border border-surface-border p-3"
-                >
-                  <Link
-                    href={`/project/${id}/layout/${l.id}/edit`}
-                    className="flex items-center gap-3 hover:text-primary"
+              {safeLayouts.map((l) => {
+                const inSetup = l.workspace_phase === "setup";
+                const href = inSetup
+                  ? `/project/${id}/layout/${l.id}/setup`
+                  : `/project/${id}/layout/${l.id}/edit`;
+                return (
+                  <li
+                    key={l.id}
+                    className="flex items-center justify-between rounded-lg border border-surface-border p-3"
                   >
-                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent/10 text-accent">
-                      <Pencil size={14} />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium">{l.name}</p>
-                      <p className="text-xs text-text-muted">
-                        {new Date(l.created_at).toLocaleString()}
-                      </p>
-                    </div>
-                  </Link>
-                  <DeleteLayoutButton layoutId={l.id} />
-                </li>
-              ))}
+                    <Link href={href} className="flex items-center gap-3 hover:text-primary">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent/10 text-accent">
+                        <Pencil size={14} />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium">
+                          {l.name}
+                          {inSetup && (
+                            <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-900 align-middle">
+                              Setup pending
+                            </span>
+                          )}
+                        </p>
+                        <p className="text-xs text-text-muted">
+                          {new Date(l.created_at).toLocaleString()}
+                        </p>
+                      </div>
+                    </Link>
+                    <DeleteLayoutButton layoutId={l.id} />
+                  </li>
+                );
+              })}
             </ul>
           )}
         </section>

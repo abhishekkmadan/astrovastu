@@ -7,10 +7,13 @@ import { MARKER_TAXONOMY } from "@/types/database";
 import { Button } from "@/components/ui/Button";
 import { Trash2, MapPin, Check, X, Minus } from "lucide-react";
 
+const DEMO_USER_ID = "00000000-0000-0000-0000-000000000001";
+
 interface Props {
   layoutId: string;
   markers: LayoutMarker[];
   setMarkers: (m: LayoutMarker[]) => void;
+  demoMode?: boolean;
 }
 
 const KINDS: MarkerKind[] = ["activity", "utility", "object"];
@@ -20,8 +23,13 @@ const VERDICT_OPTIONS: { value: Verdict; label: string; color: string }[] = [
   { value: "neutral", label: "Neutral", color: "text-warning" },
 ];
 
-export function MarkerPanel({ layoutId, markers, setMarkers }: Props) {
-  const supabase = createClient();
+export function MarkerPanel({
+  layoutId,
+  markers,
+  setMarkers,
+  demoMode = false,
+}: Props) {
+  const supabase = demoMode ? null : createClient();
   const [selectedKind, setSelectedKind] = useState<MarkerKind>("object");
   const [selectedLabel, setSelectedLabel] = useState(MARKER_TAXONOMY["object"][0]);
   const [placing, setPlacing] = useState(false);
@@ -32,6 +40,29 @@ export function MarkerPanel({ layoutId, markers, setMarkers }: Props) {
 
   async function handlePlaceMarker() {
     setPlacing(true);
+    if (demoMode) {
+      const newMarker: LayoutMarker = {
+        id: crypto.randomUUID(),
+        layout_id: layoutId,
+        user_id: DEMO_USER_ID,
+        kind: selectedKind,
+        label: selectedLabel,
+        position: { x: 0.5, y: 0.5 },
+        verdict: "neutral",
+        remedy: "",
+        notes: "",
+        created_at: new Date().toISOString(),
+      };
+      setMarkers([...markers, newMarker]);
+      setEditingId(newMarker.id);
+      setEditVerdict("neutral");
+      setEditRemedy("");
+      setEditNotes("");
+      setPlacing(false);
+      return;
+    }
+
+    if (!supabase) return;
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -81,10 +112,12 @@ export function MarkerPanel({ layoutId, markers, setMarkers }: Props) {
 
   async function saveMarkerEdit() {
     if (!editingId) return;
-    await supabase
-      .from("layout_markers")
-      .update({ verdict: editVerdict, remedy: editRemedy, notes: editNotes })
-      .eq("id", editingId);
+    if (!demoMode && supabase) {
+      await supabase
+        .from("layout_markers")
+        .update({ verdict: editVerdict, remedy: editRemedy, notes: editNotes })
+        .eq("id", editingId);
+    }
     setMarkers(
       markers.map((m) =>
         m.id === editingId
@@ -96,7 +129,9 @@ export function MarkerPanel({ layoutId, markers, setMarkers }: Props) {
   }
 
   async function deleteMarker(id: string) {
-    await supabase.from("layout_markers").delete().eq("id", id);
+    if (!demoMode && supabase) {
+      await supabase.from("layout_markers").delete().eq("id", id);
+    }
     setMarkers(markers.filter((m) => m.id !== id));
     if (editingId === id) setEditingId(null);
   }

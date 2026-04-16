@@ -37,7 +37,13 @@ export default function LandingPage() {
           activities, get verdicts with remedies, and generate PDF reports — all
           in one place.
         </p>
-        <div className="mt-10 flex items-center justify-center gap-4">
+        <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
+          <Link
+            href="/demo"
+            className="rounded-lg bg-accent px-6 py-3 font-medium text-white hover:bg-accent-dark transition-colors"
+          >
+            Try core product (demo)
+          </Link>
           <Link
             href="/auth/signup"
             className="rounded-lg bg-primary px-6 py-3 font-medium text-white hover:bg-primary-dark transition-colors"

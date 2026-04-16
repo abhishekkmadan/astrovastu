@@ -21,6 +21,7 @@ cp .env.local.example .env.local
 ```
 
 You need:
+
 - A Supabase project (URL + anon key + service role key)
 
 ### 2. Database setup
@@ -41,6 +42,10 @@ npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000).
+
+### Try the core product without Supabase
+
+After `npm run dev`, open **[http://localhost:3000/demo](http://localhost:3000/demo)** — a sample floor plan loads with the full editor (boundary, Shakti Chakra, object markers). No login or `.env` required for this route. Changes stay in the browser session only; cloud save and PDF need Supabase + sign-in.
 
 ## Project Structure
 
@@ -83,3 +88,4 @@ supabase/
 - Devta / Marma / Body Part / Prakriti / Tri Dosha / Tri Guna overlays
 - Devta Activation
 - Astro Kundli module
+

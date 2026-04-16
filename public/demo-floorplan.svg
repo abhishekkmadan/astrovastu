@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600">
+  <rect width="800" height="600" fill="#f8f9fa"/>
+  <rect x="40" y="40" width="720" height="520" fill="#ffffff" stroke="#1f2937" stroke-width="3"/>
+  <text x="400" y="32" text-anchor="middle" font-family="system-ui,sans-serif" font-size="18" font-weight="600" fill="#374151">Sample floor plan (demo)</text>
+  <rect x="60" y="80" width="220" height="180" fill="#eef2ff" stroke="#6366f1" stroke-width="2"/>
+  <text x="170" y="175" text-anchor="middle" font-family="system-ui,sans-serif" font-size="14" fill="#4338ca">Bed Room</text>
+  <rect x="300" y="80" width="200" height="200" fill="#ecfdf5" stroke="#10b981" stroke-width="2"/>
+  <text x="400" y="185" text-anchor="middle" font-family="system-ui,sans-serif" font-size="14" fill="#047857">Living</text>
+  <rect x="520" y="80" width="220" height="150" fill="#fff7ed" stroke="#ea580c" stroke-width="2"/>
+  <text x="630" y="158" text-anchor="middle" font-family="system-ui,sans-serif" font-size="14" fill="#c2410c">Kitchen</text>
+  <rect x="60" y="280" width="320" height="260" fill="#fef3c7" stroke="#d97706" stroke-width="2"/>
+  <text x="220" y="415" text-anchor="middle" font-family="system-ui,sans-serif" font-size="14" fill="#b45309">Dining + Hall</text>
+  <rect x="400" y="300" width="160" height="120" fill="#fce7f3" stroke="#db2777" stroke-width="2"/>
+  <text x="480" y="365" text-anchor="middle" font-family="system-ui,sans-serif" font-size="12" fill="#be185d">Toilet</text>
+  <rect x="580" y="240" width="160" height="140" fill="#e0e7ff" stroke="#4f46e5" stroke-width="2"/>
+  <text x="660" y="315" text-anchor="middle" font-family="system-ui,sans-serif" font-size="12" fill="#3730a3">Bath</text>
+  <text x="700" y="520" text-anchor="end" font-family="system-ui,sans-serif" font-size="12" fill="#6b7280">ENTRY �</text>
+  <polygon points="620,500 680,500 650,470" fill="#1f2937"/>
+</svg>

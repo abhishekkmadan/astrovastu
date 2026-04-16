@@ -1,9 +1,9 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import type { Layout, LayoutMarker } from "@/types/database";
+import type { Layout } from "@/types/database";
 import { VastuEditorWrapper } from "@/components/vastu-editor/VastuEditorWrapper";
 
-export default async function LayoutEditPage({
+export default async function LayoutSetupPage({
   params,
 }: {
   params: Promise<{ id: string; layoutId: string }>;
@@ -24,28 +24,10 @@ export default async function LayoutEditPage({
 
   if (!layout) notFound();
 
-  // Layouts in the setup phase must complete boundary + chakra first.
-  if ((layout as Layout).workspace_phase === "setup") {
-    redirect(`/project/${projectId}/layout/${layoutId}/setup`);
+  // If setup is already complete, go straight to the full workspace.
+  if ((layout as Layout).workspace_phase === "full") {
+    redirect(`/project/${projectId}/layout/${layoutId}/edit`);
   }
-
-  const { data: markersRaw } = await supabase
-    .from("layout_markers")
-    .select("*")
-    .eq("layout_id", layoutId)
-    .order("created_at");
-
-  // Re-hydrate size from the jsonb position blob (stored as {x,y,w,h}).
-  const markers: LayoutMarker[] = (markersRaw ?? []).map((m) => {
-    const raw = (m as { position?: { x: number; y: number; w?: number; h?: number } }).position;
-    if (!raw) return m as LayoutMarker;
-    const hasSize = typeof raw.w === "number" && typeof raw.h === "number";
-    return {
-      ...(m as LayoutMarker),
-      position: { x: raw.x, y: raw.y },
-      size: hasSize ? { w: raw.w!, h: raw.h! } : undefined,
-    };
-  });
 
   let imageUrl = "";
   if (layout.image_path) {
@@ -59,7 +41,8 @@ export default async function LayoutEditPage({
     <VastuEditorWrapper
       projectId={projectId}
       layout={{ ...layout, image_url: imageUrl } as Layout}
-      markers={markers}
+      markers={[]}
+      workspacePhase="setup"
     />
   );
 }
