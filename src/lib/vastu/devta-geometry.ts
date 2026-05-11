@@ -125,7 +125,8 @@ export function devtaZonePolygon(
 ): Point[] {
   const [innerFrac, outerFrac] = RING_RADII[zone.ring] ?? [0, 1];
 
-  let { startAngle, endAngle } = zone;
+  const { startAngle } = zone;
+  let endAngle = zone.endAngle;
 
   if (zone.ring === 0) {
     return buildCircleApprox(center, boundary, innerFrac, outerFrac);
