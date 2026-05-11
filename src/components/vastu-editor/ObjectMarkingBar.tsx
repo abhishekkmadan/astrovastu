@@ -45,6 +45,7 @@ export function ObjectMarkingBar({
   const [query, setQuery] = useState("");
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setRemedy("");
   }, [pending?.pos.x, pending?.pos.y, pending?.itemKey]);
 
