@@ -154,6 +154,7 @@ export function EditorCanvas({
     const scaleX = dims.w / imgW;
     const scaleY = dims.h / imgH;
     const s = Math.min(scaleX, scaleY) * 0.9;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setScale(s);
     setOffset({
       x: (dims.w - imgW * s) / 2,
@@ -232,7 +233,7 @@ export function EditorCanvas({
   );
 
   const updateMarquee = useCallback(
-    (_e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
+    () => {
       if (!dragRect) return;
       const stage = stageRef.current;
       if (!stage) return;
@@ -249,7 +250,7 @@ export function EditorCanvas({
   );
 
   const finishMarquee = useCallback(
-    (_e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
+    () => {
       if (!dragRect) return;
       const { start, current } = dragRect;
       setDragRect(null);
