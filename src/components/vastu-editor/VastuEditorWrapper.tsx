@@ -58,21 +58,24 @@ export function VastuEditorWrapper({
   const [pendingMarker, setPendingMarker] = useState<PendingMarker | null>(null);
   const [savingMarker, setSavingMarker] = useState(false);
 
-  const handleToolSelect = useCallback((toolKey: string) => {
-    setActiveTool(toolKey);
-    if (toolKey === "vastu-chakra") setMode("chakra");
-    else if (toolKey === "devta-marking") setMode("devta-marking");
-    else if (toolKey === "mark-objects") setMode("mark-objects");
-    else setMode("view");
-  }, []);
-
-  // Clear mark-objects state when leaving the mode.
-  useEffect(() => {
-    if (mode !== "mark-objects") {
+  /** Clears mark-objects UI state whenever leaving that mode (same places that call setMode). */
+  const goToMode = useCallback((nextMode: EditorMode) => {
+    if (nextMode !== "mark-objects") {
       setSelectedItemKey(null);
       setPendingMarker(null);
     }
-  }, [mode]);
+    setMode(nextMode);
+  }, []);
+
+  const handleToolSelect = useCallback((toolKey: string) => {
+    setActiveTool(toolKey);
+    let nextMode: EditorMode;
+    if (toolKey === "vastu-chakra") nextMode = "chakra";
+    else if (toolKey === "devta-marking") nextMode = "devta-marking";
+    else if (toolKey === "mark-objects") nextMode = "mark-objects";
+    else nextMode = "view";
+    goToMode(nextMode);
+  }, [goToMode]);
 
   // Escape cancels the current selection / pending placement (Photoshop feel).
   useEffect(() => {
@@ -188,7 +191,7 @@ export function VastuEditorWrapper({
     }
     if (boundary.length < 3) {
       alert("Please draw a boundary with at least 3 points before continuing.");
-      setMode("boundary");
+      goToMode("boundary");
       return;
     }
     setSaving(true);
@@ -298,7 +301,7 @@ export function VastuEditorWrapper({
           </p>
           <div className="space-y-0.5">
             <button
-              onClick={() => setMode("boundary")}
+              onClick={() => goToMode("boundary")}
               className={`w-full text-left rounded-lg px-3 py-2 text-sm transition-colors ${
                 mode === "boundary"
                   ? "bg-accent/10 text-accent font-medium"

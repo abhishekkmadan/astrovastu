@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { MapPin, Save, Trash2, ChevronDown, Search, X } from "lucide-react";
 import { OBJECT_CATALOG } from "@/lib/vastu/object-catalog";
 import type { ZoneVerdict } from "@/lib/vastu/zone-verdicts";
@@ -40,13 +40,8 @@ export function ObjectMarkingBar({
   onCancel,
   saving = false,
 }: Props) {
-  const [remedy, setRemedy] = useState("");
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [query, setQuery] = useState("");
-
-  useEffect(() => {
-    setRemedy("");
-  }, [pending?.pos.x, pending?.pos.y, pending?.itemKey]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -161,44 +156,68 @@ export function ObjectMarkingBar({
 
       {/* Bottom verdict card (Photoshop-style colored title bar) */}
       {pending && (
-        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 w-[min(48rem,calc(100%-1.5rem))] rounded-lg bg-surface border border-surface-border shadow-xl overflow-hidden">
-          <div
-            className={`flex items-center justify-between px-3 py-2 ${HEADER_BG[pending.verdict.verdict]}`}
-          >
-            <button
-              onClick={onCancel}
-              disabled={saving}
-              title="Discard placement"
-              className="rounded p-1 text-white/95 hover:bg-black/20 disabled:opacity-50"
-            >
-              <Trash2 size={16} />
-            </button>
-            <h3 className="text-sm font-semibold text-white">
-              {pending.itemLabel} in {zoneLabel(pending.zoneIdx)}
-            </h3>
-            <button
-              onClick={() => onSave(remedy)}
-              disabled={saving}
-              title={saving ? "Saving…" : "Save placement"}
-              className="rounded p-1 text-white/95 hover:bg-black/20 disabled:opacity-50"
-            >
-              <Save size={16} />
-            </button>
-          </div>
-          <div className="bg-surface px-4 py-3 space-y-2">
-            <p className="text-sm leading-relaxed text-text">
-              {pending.verdict.explanation}
-            </p>
-            <textarea
-              rows={2}
-              value={remedy}
-              onChange={(e) => setRemedy(e.target.value)}
-              placeholder="Add a remedy or note (optional)…"
-              className="w-full resize-none rounded-md border border-surface-border px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
-            />
-          </div>
-        </div>
+        <PendingVerdictCard
+          key={`${pending.itemKey}-${pending.pos.x}-${pending.pos.y}`}
+          pending={pending}
+          onSave={onSave}
+          onCancel={onCancel}
+          saving={saving}
+        />
       )}
     </>
+  );
+}
+
+function PendingVerdictCard({
+  pending,
+  onSave,
+  onCancel,
+  saving,
+}: {
+  pending: PendingMarker;
+  onSave: (remedy: string) => Promise<void> | void;
+  onCancel: () => void;
+  saving: boolean;
+}) {
+  const [remedy, setRemedy] = useState("");
+
+  return (
+    <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 w-[min(48rem,calc(100%-1.5rem))] rounded-lg bg-surface border border-surface-border shadow-xl overflow-hidden">
+      <div
+        className={`flex items-center justify-between px-3 py-2 ${HEADER_BG[pending.verdict.verdict]}`}
+      >
+        <button
+          onClick={onCancel}
+          disabled={saving}
+          title="Discard placement"
+          className="rounded p-1 text-white/95 hover:bg-black/20 disabled:opacity-50"
+        >
+          <Trash2 size={16} />
+        </button>
+        <h3 className="text-sm font-semibold text-white">
+          {pending.itemLabel} in {zoneLabel(pending.zoneIdx)}
+        </h3>
+        <button
+          onClick={() => onSave(remedy)}
+          disabled={saving}
+          title={saving ? "Saving…" : "Save placement"}
+          className="rounded p-1 text-white/95 hover:bg-black/20 disabled:opacity-50"
+        >
+          <Save size={16} />
+        </button>
+      </div>
+      <div className="bg-surface px-4 py-3 space-y-2">
+        <p className="text-sm leading-relaxed text-text">
+          {pending.verdict.explanation}
+        </p>
+        <textarea
+          rows={2}
+          value={remedy}
+          onChange={(e) => setRemedy(e.target.value)}
+          placeholder="Add a remedy or note (optional)…"
+          className="w-full resize-none rounded-md border border-surface-border px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+        />
+      </div>
+    </div>
   );
 }

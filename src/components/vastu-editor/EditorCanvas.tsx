@@ -1,7 +1,7 @@
 "use client";
 
 import type { Dispatch, SetStateAction } from "react";
-import { useRef, useState, useEffect, useCallback } from "react";
+import { useRef, useState, useEffect, useCallback, useMemo } from "react";
 import {
   Stage,
   Layer,
@@ -55,6 +55,15 @@ interface Props {
   /** Rectangle for the currently pending (unsaved) marker, to render on top. */
   pendingRect?: { center: Point; size: MarkerSize; verdict: "good" | "bad" | "neutral" } | null;
 }
+
+type EditorCanvasViewportProps = Props & {
+  dims: { w: number; h: number };
+  image: HTMLImageElement | null;
+  imgW: number;
+  imgH: number;
+  offset: { x: number; y: number };
+  fitScale: number;
+};
 
 
 const FLOOR_IMAGE_NAME = "floor-image";
@@ -112,8 +121,13 @@ function getBoundaryCentroid(points: Point[]): Point | null {
   };
 }
 
-export function EditorCanvas({
-  imageUrl,
+function EditorCanvasViewport({
+  dims,
+  image,
+  imgW,
+  imgH,
+  offset,
+  fitScale,
   mode,
   boundary,
   setBoundary,
@@ -127,39 +141,10 @@ export function EditorCanvas({
   objectPlacingActive,
   onMapSelect,
   pendingRect,
-}: Props) {
-  const containerRef = useRef<HTMLDivElement>(null);
+}: EditorCanvasViewportProps) {
   const stageRef = useRef<Konva.Stage>(null);
-  const [dims, setDims] = useState({ w: 800, h: 600 });
-  const [scale, setScale] = useState(1);
-  const [offset, setOffset] = useState({ x: 0, y: 0 });
-  const image = useImage(imageUrl);
-
-  const imgW = image?.naturalWidth ?? 1;
-  const imgH = image?.naturalHeight ?? 1;
-
-  useEffect(() => {
-    function handleResize() {
-      if (!containerRef.current) return;
-      const rect = containerRef.current.getBoundingClientRect();
-      setDims({ w: rect.width, h: rect.height });
-    }
-    handleResize();
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, []);
-
-  useEffect(() => {
-    if (!image) return;
-    const scaleX = dims.w / imgW;
-    const scaleY = dims.h / imgH;
-    const s = Math.min(scaleX, scaleY) * 0.9;
-    setScale(s);
-    setOffset({
-      x: (dims.w - imgW * s) / 2,
-      y: (dims.h - imgH * s) / 2,
-    });
-  }, [image, dims, imgW, imgH]);
+  /** Wheel zoom; resets when parent remounts us (`key` changes with layout/image). */
+  const [scale, setScale] = useState(fitScale);
 
   const toCanvas = useCallback(
     (p: Point) => ({ x: p.x * imgW * scale + offset.x, y: p.y * imgH * scale + offset.y }),
@@ -232,7 +217,7 @@ export function EditorCanvas({
   );
 
   const updateMarquee = useCallback(
-    (_e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
+    () => {
       if (!dragRect) return;
       const stage = stageRef.current;
       if (!stage) return;
@@ -249,7 +234,7 @@ export function EditorCanvas({
   );
 
   const finishMarquee = useCallback(
-    (_e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
+    () => {
       if (!dragRect) return;
       const { start, current } = dragRect;
       setDragRect(null);
@@ -344,25 +329,8 @@ export function EditorCanvas({
   const minCanvasSide = Math.min(imgW * scale, imgH * scale);
   const chakraRadius = Math.min(minCanvasSide * 0.45 * chakraZoom, minCanvasSide * 0.5);
 
-  const containerCursor =
-    mode === "boundary"
-      ? "crosshair"
-      : mode === "mark-objects" && objectPlacingActive
-        ? "crosshair"
-        : "default";
-
   return (
-    <div
-      ref={containerRef}
-      className="relative h-full w-full"
-      style={{ cursor: containerCursor }}
-    >
-      {mode === "boundary" && (
-        <p className="pointer-events-none absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-lg bg-surface/95 px-4 py-2 text-center text-xs text-text-muted shadow-sm ring-1 ring-surface-border">
-          Click on the plan to add corners (in order). Drag blue points to adjust.
-          Double-click a point to remove. Scroll to zoom.
-        </p>
-      )}
+    <>
       <Stage
         ref={stageRef}
         width={dims.w}
@@ -871,6 +839,75 @@ export function EditorCanvas({
           })()}
         </Layer>
       </Stage>
+    </>
+  );
+}
+
+export function EditorCanvas(props: Props) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [dims, setDims] = useState({ w: 800, h: 600 });
+  const image = useImage(props.imageUrl);
+
+  const imgW = image?.naturalWidth ?? 1;
+  const imgH = image?.naturalHeight ?? 1;
+
+  const fitScale = useMemo(() => {
+    if (!image) return null;
+    const scaleX = dims.w / imgW;
+    const scaleY = dims.h / imgH;
+    return Math.min(scaleX, scaleY) * 0.9;
+  }, [image, dims.w, dims.h, imgW, imgH]);
+
+  const offset = useMemo(() => {
+    if (fitScale == null) return { x: 0, y: 0 };
+    return {
+      x: (dims.w - imgW * fitScale) / 2,
+      y: (dims.h - imgH * fitScale) / 2,
+    };
+  }, [dims.w, dims.h, imgW, imgH, fitScale]);
+
+  const fitSig = `${dims.w}-${dims.h}-${imgW}-${imgH}-${Boolean(image)}`;
+
+  useEffect(() => {
+    function handleResize() {
+      if (!containerRef.current) return;
+      const rect = containerRef.current.getBoundingClientRect();
+      setDims({ w: rect.width, h: rect.height });
+    }
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  const containerCursor =
+    props.mode === "boundary"
+      ? "crosshair"
+      : props.mode === "mark-objects" && props.objectPlacingActive
+        ? "crosshair"
+        : "default";
+
+  return (
+    <div
+      ref={containerRef}
+      className="relative h-full w-full"
+      style={{ cursor: containerCursor }}
+    >
+      {props.mode === "boundary" && (
+        <p className="pointer-events-none absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-lg bg-surface/95 px-4 py-2 text-center text-xs text-text-muted shadow-sm ring-1 ring-surface-border">
+          Click on the plan to add corners (in order). Drag blue points to adjust.
+          Double-click a point to remove. Scroll to zoom.
+        </p>
+      )}
+      <EditorCanvasViewport
+        key={fitSig}
+        {...props}
+        dims={dims}
+        image={image}
+        imgW={imgW}
+        imgH={imgH}
+        offset={offset}
+        fitScale={fitScale ?? 1}
+      />
     </div>
   );
 }
