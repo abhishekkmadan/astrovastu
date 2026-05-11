@@ -156,7 +156,6 @@ export function EditorCanvas({
     const s = Math.min(scaleX, scaleY) * 0.9;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setScale(s);
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setOffset({
       x: (dims.w - imgW * s) / 2,
       y: (dims.h - imgH * s) / 2,
