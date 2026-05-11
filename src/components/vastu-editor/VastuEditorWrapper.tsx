@@ -113,36 +113,47 @@ export function VastuEditorWrapper({
     async (remedy: string) => {
       if (!pendingMarker) return;
       setSavingMarker(true);
-      const { itemLabel, kind, pos, size, verdict } = pendingMarker;
-      const newId =
-        typeof crypto !== "undefined" && "randomUUID" in crypto
-          ? crypto.randomUUID()
-          : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      try {
+        const { itemLabel, kind, pos, size, verdict } = pendingMarker;
+        const newId =
+          typeof crypto !== "undefined" && "randomUUID" in crypto
+            ? crypto.randomUUID()
+            : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
-      const newMarker: LayoutMarker = {
-        id: newId,
-        layout_id: layout.id,
-        user_id: demoMode ? "demo" : "",
-        kind,
-        label: itemLabel,
-        position: pos,
-        size,
-        verdict: verdict.verdict,
-        remedy,
-        notes: verdict.explanation,
-        created_at: new Date().toISOString(),
-      };
+        const newMarker: LayoutMarker = {
+          id: newId,
+          layout_id: layout.id,
+          user_id: demoMode ? "demo" : "",
+          kind,
+          label: itemLabel,
+          position: pos,
+          size,
+          verdict: verdict.verdict,
+          remedy,
+          notes: verdict.explanation,
+          created_at: new Date().toISOString(),
+        };
 
-      if (!demoMode && supabase) {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
-        if (user) {
+        if (!demoMode) {
+          if (!supabase) {
+            throw new Error("Supabase is not configured.");
+          }
+          const {
+            data: { user },
+            error: userError,
+          } = await supabase.auth.getUser();
+          if (userError) {
+            throw userError;
+          }
+          if (!user) {
+            throw new Error("You must be signed in to save markers.");
+          }
+
           newMarker.user_id = user.id;
           // Store size inside the jsonb position blob for round-tripping without
           // a schema change.
           const positionWithSize = { x: pos.x, y: pos.y, w: size.w, h: size.h };
-          await supabase.from("layout_markers").insert({
+          const { error: insertError } = await supabase.from("layout_markers").insert({
             id: newMarker.id,
             layout_id: layout.id,
             user_id: user.id,
@@ -153,12 +164,19 @@ export function VastuEditorWrapper({
             remedy,
             notes: verdict.explanation,
           });
+          if (insertError) {
+            throw insertError;
+          }
         }
-      }
 
-      setMarkers((prev) => [...prev, newMarker]);
-      setPendingMarker(null);
-      setSavingMarker(false);
+        setMarkers((prev) => [...prev, newMarker]);
+        setPendingMarker(null);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Unknown error";
+        alert(`Could not save marker: ${message}`);
+      } finally {
+        setSavingMarker(false);
+      }
     },
     [pendingMarker, layout.id, demoMode, supabase]
   );
