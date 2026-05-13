@@ -4,10 +4,11 @@ import { jsPDF } from "jspdf";
 import type { LayoutMarker } from "@/types/database";
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ layoutId: string }> }
 ) {
-  const { layoutId } = await params;
+  const { layoutId: requestedId } = await params;
+  const reportType = new URL(request.url).searchParams.get("type");
   const supabase = await createClient();
   const {
     data: { user },
@@ -17,12 +18,22 @@ export async function GET(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { data: layout } = await supabase
-    .from("layouts")
-    .select("*, projects(*)")
-    .eq("id", layoutId)
-    .eq("user_id", user.id)
-    .single();
+  const { data: layout } =
+    reportType === "project"
+      ? await supabase
+          .from("layouts")
+          .select("*, projects(*)")
+          .eq("project_id", requestedId)
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle()
+      : await supabase
+          .from("layouts")
+          .select("*, projects(*)")
+          .eq("id", requestedId)
+          .eq("user_id", user.id)
+          .maybeSingle();
 
   if (!layout) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -31,7 +42,7 @@ export async function GET(
   const { data: markers } = await supabase
     .from("layout_markers")
     .select("*")
-    .eq("layout_id", layoutId)
+    .eq("layout_id", layout.id)
     .order("created_at");
 
   const project = layout.projects as Record<string, string>;

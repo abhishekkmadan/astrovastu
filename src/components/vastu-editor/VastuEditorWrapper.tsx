@@ -49,6 +49,7 @@ export function VastuEditorWrapper({
   const [chakraZoom, setChakraZoom] = useState(layout.viewport?.scale ?? 1);
   const [markers, setMarkers] = useState<LayoutMarker[]>(initialMarkers);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [activeTool, setActiveTool] = useState<string>("vastu-chakra");
 
   const [selectedDevta, setSelectedDevta] = useState<number | null>(null);
@@ -57,6 +58,7 @@ export function VastuEditorWrapper({
   const [selectedItemKey, setSelectedItemKey] = useState<string | null>(null);
   const [pendingMarker, setPendingMarker] = useState<PendingMarker | null>(null);
   const [savingMarker, setSavingMarker] = useState(false);
+  const [markerError, setMarkerError] = useState<string | null>(null);
 
   /** Clears mark-objects UI state whenever leaving that mode (same places that call setMode). */
   const goToMode = useCallback((nextMode: EditorMode) => {
@@ -116,6 +118,7 @@ export function VastuEditorWrapper({
     async (remedy: string) => {
       if (!pendingMarker) return;
       setSavingMarker(true);
+      setMarkerError(null);
       const { itemLabel, kind, pos, size, verdict } = pendingMarker;
       const newId =
         typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -136,16 +139,28 @@ export function VastuEditorWrapper({
         created_at: new Date().toISOString(),
       };
 
-      if (!demoMode && supabase) {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
-        if (user) {
+      try {
+        if (!demoMode) {
+          if (!supabase) {
+            throw new Error("Supabase is not configured.");
+          }
+
+          const {
+            data: { user },
+            error: userError,
+          } = await supabase.auth.getUser();
+          if (userError) {
+            throw new Error(userError.message);
+          }
+          if (!user) {
+            throw new Error("You must be signed in to save markers.");
+          }
+
           newMarker.user_id = user.id;
           // Store size inside the jsonb position blob for round-tripping without
           // a schema change.
           const positionWithSize = { x: pos.x, y: pos.y, w: size.w, h: size.h };
-          await supabase.from("layout_markers").insert({
+          const { error } = await supabase.from("layout_markers").insert({
             id: newMarker.id,
             layout_id: layout.id,
             user_id: user.id,
@@ -156,12 +171,20 @@ export function VastuEditorWrapper({
             remedy,
             notes: verdict.explanation,
           });
+          if (error) {
+            throw new Error(error.message);
+          }
         }
-      }
 
-      setMarkers((prev) => [...prev, newMarker]);
-      setPendingMarker(null);
-      setSavingMarker(false);
+        setMarkers((prev) => [...prev, newMarker]);
+        setPendingMarker(null);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Unknown error";
+        setMarkerError(message);
+        alert(`Could not save marker: ${message}`);
+      } finally {
+        setSavingMarker(false);
+      }
     },
     [pendingMarker, layout.id, demoMode, supabase]
   );
@@ -171,17 +194,28 @@ export function VastuEditorWrapper({
       return;
     }
     setSaving(true);
-    await supabase
-      .from("layouts")
-      .update({
-        boundary,
-        center,
-        north_degrees: northDegrees,
-        viewport: { x: 0, y: 0, scale: chakraZoom },
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", layout.id);
-    setSaving(false);
+    setSaveError(null);
+    try {
+      const { error } = await supabase
+        .from("layouts")
+        .update({
+          boundary,
+          center,
+          north_degrees: northDegrees,
+          viewport: { x: 0, y: 0, scale: chakraZoom },
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", layout.id);
+      if (error) {
+        throw new Error(error.message);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      setSaveError(message);
+      alert(`Could not save layout: ${message}`);
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function handleSaveAndContinue() {
@@ -195,6 +229,7 @@ export function VastuEditorWrapper({
       return;
     }
     setSaving(true);
+    setSaveError(null);
     const { error } = await supabase
       .from("layouts")
       .update({
@@ -208,6 +243,7 @@ export function VastuEditorWrapper({
       .eq("id", layout.id);
     setSaving(false);
     if (error) {
+      setSaveError(error.message);
       alert(`Could not save: ${error.message}`);
       return;
     }
@@ -292,6 +328,11 @@ export function VastuEditorWrapper({
           )}
         </div>
       </div>
+      {saveError && (
+        <div className="border-b border-danger/20 bg-danger/10 px-4 py-2 text-sm text-danger">
+          Could not save layout: {saveError}
+        </div>
+      )}
 
       <div className="flex flex-1 overflow-hidden">
         {/* Left sidebar: Vastu tools */}
@@ -404,6 +445,11 @@ export function VastuEditorWrapper({
               onSave={handleSaveMarker}
               saving={savingMarker}
             />
+          )}
+          {markerError && mode === "mark-objects" && (
+            <div className="absolute bottom-28 left-1/2 z-20 w-[min(40rem,calc(100%-1.5rem))] -translate-x-1/2 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger shadow-sm">
+              Could not save marker: {markerError}
+            </div>
           )}
           {/* North tilt + chakra size (only in chakra mode) */}
           {mode === "chakra" && (
