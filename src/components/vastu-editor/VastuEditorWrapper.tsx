@@ -13,6 +13,18 @@ import { findCatalogItem } from "@/lib/vastu/object-catalog";
 import { zoneIndexForPoint } from "@/lib/vastu/zone-detect";
 import { lookupVerdict } from "@/lib/vastu/zone-verdicts";
 
+function getErrorMessage(error: unknown): string {
+  if (
+    error &&
+    typeof error === "object" &&
+    "message" in error &&
+    typeof error.message === "string"
+  ) {
+    return error.message;
+  }
+  return "Unexpected error";
+}
+
 export type EditorMode = "boundary" | "chakra" | "devta-marking" | "mark-objects" | "view";
 
 interface Props {
@@ -116,36 +128,43 @@ export function VastuEditorWrapper({
     async (remedy: string) => {
       if (!pendingMarker) return;
       setSavingMarker(true);
-      const { itemLabel, kind, pos, size, verdict } = pendingMarker;
-      const newId =
-        typeof crypto !== "undefined" && "randomUUID" in crypto
-          ? crypto.randomUUID()
-          : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
-      const newMarker: LayoutMarker = {
-        id: newId,
-        layout_id: layout.id,
-        user_id: demoMode ? "demo" : "",
-        kind,
-        label: itemLabel,
-        position: pos,
-        size,
-        verdict: verdict.verdict,
-        remedy,
-        notes: verdict.explanation,
-        created_at: new Date().toISOString(),
-      };
+      try {
+        const { itemLabel, kind, pos, size, verdict } = pendingMarker;
+        const newId =
+          typeof crypto !== "undefined" && "randomUUID" in crypto
+            ? crypto.randomUUID()
+            : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
-      if (!demoMode && supabase) {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
-        if (user) {
+        const newMarker: LayoutMarker = {
+          id: newId,
+          layout_id: layout.id,
+          user_id: demoMode ? "demo" : "",
+          kind,
+          label: itemLabel,
+          position: pos,
+          size,
+          verdict: verdict.verdict,
+          remedy,
+          notes: verdict.explanation,
+          created_at: new Date().toISOString(),
+        };
+
+        if (!demoMode) {
+          if (!supabase) throw new Error("Supabase client is unavailable.");
+
+          const {
+            data: { user },
+            error: userError,
+          } = await supabase.auth.getUser();
+          if (userError) throw userError;
+          if (!user) throw new Error("You must be signed in to save markers.");
+
           newMarker.user_id = user.id;
           // Store size inside the jsonb position blob for round-tripping without
           // a schema change.
           const positionWithSize = { x: pos.x, y: pos.y, w: size.w, h: size.h };
-          await supabase.from("layout_markers").insert({
+          const { error } = await supabase.from("layout_markers").insert({
             id: newMarker.id,
             layout_id: layout.id,
             user_id: user.id,
@@ -156,12 +175,16 @@ export function VastuEditorWrapper({
             remedy,
             notes: verdict.explanation,
           });
+          if (error) throw error;
         }
-      }
 
-      setMarkers((prev) => [...prev, newMarker]);
-      setPendingMarker(null);
-      setSavingMarker(false);
+        setMarkers((prev) => [...prev, newMarker]);
+        setPendingMarker(null);
+      } catch (error) {
+        alert(`Could not save marker: ${getErrorMessage(error)}`);
+      } finally {
+        setSavingMarker(false);
+      }
     },
     [pendingMarker, layout.id, demoMode, supabase]
   );
@@ -171,17 +194,26 @@ export function VastuEditorWrapper({
       return;
     }
     setSaving(true);
-    await supabase
-      .from("layouts")
-      .update({
-        boundary,
-        center,
-        north_degrees: northDegrees,
-        viewport: { x: 0, y: 0, scale: chakraZoom },
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", layout.id);
-    setSaving(false);
+    try {
+      const { error } = await supabase
+        .from("layouts")
+        .update({
+          boundary,
+          center,
+          north_degrees: northDegrees,
+          viewport: { x: 0, y: 0, scale: chakraZoom },
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", layout.id);
+
+      if (error) {
+        alert(`Could not save layout: ${error.message}`);
+      }
+    } catch (error) {
+      alert(`Could not save layout: ${getErrorMessage(error)}`);
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function handleSaveAndContinue() {
@@ -195,23 +227,30 @@ export function VastuEditorWrapper({
       return;
     }
     setSaving(true);
-    const { error } = await supabase
-      .from("layouts")
-      .update({
-        boundary,
-        center,
-        north_degrees: northDegrees,
-        viewport: { x: 0, y: 0, scale: chakraZoom },
-        workspace_phase: "full",
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", layout.id);
-    setSaving(false);
-    if (error) {
-      alert(`Could not save: ${error.message}`);
-      return;
+    try {
+      const { error } = await supabase
+        .from("layouts")
+        .update({
+          boundary,
+          center,
+          north_degrees: northDegrees,
+          viewport: { x: 0, y: 0, scale: chakraZoom },
+          workspace_phase: "full",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", layout.id);
+
+      if (error) {
+        alert(`Could not save: ${error.message}`);
+        return;
+      }
+
+      router.push(`/project/${projectId}/layout/${layout.id}/edit`);
+    } catch (error) {
+      alert(`Could not save: ${getErrorMessage(error)}`);
+    } finally {
+      setSaving(false);
     }
-    router.push(`/project/${projectId}/layout/${layout.id}/edit`);
   }
 
   return (
