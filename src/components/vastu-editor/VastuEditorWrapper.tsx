@@ -138,24 +138,34 @@ export function VastuEditorWrapper({
 
       if (!demoMode && supabase) {
         const {
+          error: authError,
           data: { user },
         } = await supabase.auth.getUser();
-        if (user) {
-          newMarker.user_id = user.id;
-          // Store size inside the jsonb position blob for round-tripping without
-          // a schema change.
-          const positionWithSize = { x: pos.x, y: pos.y, w: size.w, h: size.h };
-          await supabase.from("layout_markers").insert({
-            id: newMarker.id,
-            layout_id: layout.id,
-            user_id: user.id,
-            kind,
-            label: itemLabel,
-            position: positionWithSize,
-            verdict: verdict.verdict,
-            remedy,
-            notes: verdict.explanation,
-          });
+        if (authError || !user) {
+          alert(authError?.message ?? "Please sign in again before saving this marker.");
+          setSavingMarker(false);
+          return;
+        }
+
+        newMarker.user_id = user.id;
+        // Store size inside the jsonb position blob for round-tripping without
+        // a schema change.
+        const positionWithSize = { x: pos.x, y: pos.y, w: size.w, h: size.h };
+        const { error } = await supabase.from("layout_markers").insert({
+          id: newMarker.id,
+          layout_id: layout.id,
+          user_id: user.id,
+          kind,
+          label: itemLabel,
+          position: positionWithSize,
+          verdict: verdict.verdict,
+          remedy,
+          notes: verdict.explanation,
+        });
+        if (error) {
+          alert(`Could not save marker: ${error.message}`);
+          setSavingMarker(false);
+          return;
         }
       }
 
@@ -171,7 +181,7 @@ export function VastuEditorWrapper({
       return;
     }
     setSaving(true);
-    await supabase
+    const { error } = await supabase
       .from("layouts")
       .update({
         boundary,
@@ -182,6 +192,9 @@ export function VastuEditorWrapper({
       })
       .eq("id", layout.id);
     setSaving(false);
+    if (error) {
+      alert(`Could not save layout: ${error.message}`);
+    }
   }
 
   async function handleSaveAndContinue() {
