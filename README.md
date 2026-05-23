@@ -26,13 +26,14 @@ You need:
 
 ### 2. Database setup
 
-Run the SQL migration in your Supabase SQL Editor:
+Run the SQL migrations in your Supabase SQL Editor, in order:
 
 ```
 supabase/migrations/00001_initial_schema.sql
+supabase/migrations/00002_layout_workspace_phase.sql
 ```
 
-This creates tables (profiles, projects, layouts, layout_markers), RLS policies, a signup trigger, and a private storage bucket for floor plans.
+This creates tables (profiles, projects, layouts, layout_markers), RLS policies, a signup trigger, the layout workspace-phase column, and a private storage bucket for floor plans.
 
 ### 3. Install & run
 
