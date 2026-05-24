@@ -21,6 +21,27 @@
 import type { Point } from "@/types/database";
 import { RING_RADII, type DevtaZone } from "./devta-data";
 
+interface GeometryScale {
+  width: number;
+  height: number;
+}
+
+function activeScale(scale?: GeometryScale): GeometryScale | null {
+  if (!scale || scale.width <= 0 || scale.height <= 0) return null;
+  if (!Number.isFinite(scale.width) || !Number.isFinite(scale.height)) return null;
+  return scale;
+}
+
+function scalePoint(p: Point, scale: GeometryScale | null): Point {
+  if (!scale) return p;
+  return { x: p.x * scale.width, y: p.y * scale.height };
+}
+
+function unscalePoint(p: Point, scale: GeometryScale | null): Point {
+  if (!scale) return p;
+  return { x: p.x / scale.width, y: p.y / scale.height };
+}
+
 /** Degrees → radians */
 function deg2rad(d: number): number {
   return (d * Math.PI) / 180;
@@ -71,25 +92,34 @@ function raySegmentIntersect(
 export function rayBoundaryIntersection(
   center: Point,
   boundary: Point[],
-  compassDeg: number
+  compassDeg: number,
+  scale?: GeometryScale
 ): Point | null {
+  const geometryScale = activeScale(scale);
+  const scaledCenter = scalePoint(center, geometryScale);
+  const scaledBoundary = geometryScale
+    ? boundary.map((p) => scalePoint(p, geometryScale))
+    : boundary;
   const dir = compassDir(compassDeg);
   let minT = Infinity;
 
-  for (let i = 0; i < boundary.length; i++) {
-    const a = boundary[i];
-    const b = boundary[(i + 1) % boundary.length];
-    const t = raySegmentIntersect(center, dir, a, b);
+  for (let i = 0; i < scaledBoundary.length; i++) {
+    const a = scaledBoundary[i];
+    const b = scaledBoundary[(i + 1) % scaledBoundary.length];
+    const t = raySegmentIntersect(scaledCenter, dir, a, b);
     if (t !== null && t < minT) {
       minT = t;
     }
   }
 
   if (!isFinite(minT)) return null;
-  return {
-    x: center.x + dir.x * minT,
-    y: center.y + dir.y * minT,
-  };
+  return unscalePoint(
+    {
+      x: scaledCenter.x + dir.x * minT,
+      y: scaledCenter.y + dir.y * minT,
+    },
+    geometryScale
+  );
 }
 
 /**
@@ -100,9 +130,10 @@ export function pointAtFraction(
   center: Point,
   boundary: Point[],
   compassDeg: number,
-  frac: number
+  frac: number,
+  scale?: GeometryScale
 ): Point {
-  const hit = rayBoundaryIntersection(center, boundary, compassDeg);
+  const hit = rayBoundaryIntersection(center, boundary, compassDeg, scale);
   if (!hit) return center;
   return {
     x: center.x + (hit.x - center.x) * frac,
@@ -121,7 +152,8 @@ const ANGULAR_STEPS = 6;
 export function devtaZonePolygon(
   zone: DevtaZone,
   center: Point,
-  boundary: Point[]
+  boundary: Point[],
+  scale?: GeometryScale
 ): Point[] {
   const [innerFrac, outerFrac] = RING_RADII[zone.ring] ?? [0, 1];
 
@@ -129,7 +161,7 @@ export function devtaZonePolygon(
   let endAngle = zone.endAngle;
 
   if (zone.ring === 0) {
-    return buildCircleApprox(center, boundary, innerFrac, outerFrac);
+    return buildCircleApprox(center, boundary, innerFrac, outerFrac, scale);
   }
 
   if (endAngle < startAngle) endAngle += 360;
@@ -142,8 +174,8 @@ export function devtaZonePolygon(
 
   for (let s = 0; s <= steps; s++) {
     const angle = (startAngle + (span * s) / steps) % 360;
-    innerPts.push(pointAtFraction(center, boundary, angle, innerFrac));
-    outerPts.push(pointAtFraction(center, boundary, angle, outerFrac));
+    innerPts.push(pointAtFraction(center, boundary, angle, innerFrac, scale));
+    outerPts.push(pointAtFraction(center, boundary, angle, outerFrac, scale));
   }
 
   return [...innerPts, ...outerPts.reverse()];
@@ -153,11 +185,12 @@ function buildCircleApprox(
   center: Point,
   boundary: Point[],
   _innerFrac: number,
-  outerFrac: number
+  outerFrac: number,
+  scale?: GeometryScale
 ): Point[] {
   const pts: Point[] = [];
   for (let deg = 0; deg < 360; deg += 10) {
-    pts.push(pointAtFraction(center, boundary, deg, outerFrac));
+    pts.push(pointAtFraction(center, boundary, deg, outerFrac, scale));
   }
   return pts;
 }

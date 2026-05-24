@@ -15,6 +15,11 @@ import { lookupVerdict } from "@/lib/vastu/zone-verdicts";
 
 export type EditorMode = "boundary" | "chakra" | "devta-marking" | "mark-objects" | "view";
 
+function normalizeDegrees(degrees: number): number {
+  if (!Number.isFinite(degrees)) return 0;
+  return ((degrees % 360) + 360) % 360;
+}
+
 interface Props {
   projectId: string;
   layout: Layout;
@@ -44,7 +49,9 @@ export function VastuEditorWrapper({
   const [mode, setMode] = useState<EditorMode>("boundary");
   const [boundary, setBoundary] = useState<Point[]>(layout.boundary ?? []);
   const [center, setCenter] = useState<Point>(layout.center ?? { x: 0.5, y: 0.5 });
-  const [northDegrees, setNorthDegrees] = useState(layout.north_degrees ?? 0);
+  const [northDegrees, setNorthDegrees] = useState(
+    normalizeDegrees(layout.north_degrees ?? 0)
+  );
   /** Scale factor for the overlay compass only (floor plan zoom is unchanged). */
   const [chakraZoom, setChakraZoom] = useState(layout.viewport?.scale ?? 1);
   const [markers, setMarkers] = useState<LayoutMarker[]>(initialMarkers);
@@ -116,36 +123,45 @@ export function VastuEditorWrapper({
     async (remedy: string) => {
       if (!pendingMarker) return;
       setSavingMarker(true);
-      const { itemLabel, kind, pos, size, verdict } = pendingMarker;
-      const newId =
-        typeof crypto !== "undefined" && "randomUUID" in crypto
-          ? crypto.randomUUID()
-          : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      try {
+        const { itemLabel, kind, pos, size, verdict } = pendingMarker;
+        const newId =
+          typeof crypto !== "undefined" && "randomUUID" in crypto
+            ? crypto.randomUUID()
+            : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
-      const newMarker: LayoutMarker = {
-        id: newId,
-        layout_id: layout.id,
-        user_id: demoMode ? "demo" : "",
-        kind,
-        label: itemLabel,
-        position: pos,
-        size,
-        verdict: verdict.verdict,
-        remedy,
-        notes: verdict.explanation,
-        created_at: new Date().toISOString(),
-      };
+        const newMarker: LayoutMarker = {
+          id: newId,
+          layout_id: layout.id,
+          user_id: demoMode ? "demo" : "",
+          kind,
+          label: itemLabel,
+          position: pos,
+          size,
+          verdict: verdict.verdict,
+          remedy,
+          notes: verdict.explanation,
+          created_at: new Date().toISOString(),
+        };
 
-      if (!demoMode && supabase) {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
-        if (user) {
+        if (!demoMode) {
+          if (!supabase) {
+            throw new Error("Supabase is not configured.");
+          }
+
+          const {
+            data: { user },
+            error: userError,
+          } = await supabase.auth.getUser();
+          if (userError || !user) {
+            throw new Error(userError?.message ?? "Please sign in again to save markers.");
+          }
+
           newMarker.user_id = user.id;
           // Store size inside the jsonb position blob for round-tripping without
           // a schema change.
           const positionWithSize = { x: pos.x, y: pos.y, w: size.w, h: size.h };
-          await supabase.from("layout_markers").insert({
+          const { error } = await supabase.from("layout_markers").insert({
             id: newMarker.id,
             layout_id: layout.id,
             user_id: user.id,
@@ -156,12 +172,19 @@ export function VastuEditorWrapper({
             remedy,
             notes: verdict.explanation,
           });
+          if (error) {
+            throw new Error(error.message);
+          }
         }
-      }
 
-      setMarkers((prev) => [...prev, newMarker]);
-      setPendingMarker(null);
-      setSavingMarker(false);
+        setMarkers((prev) => [...prev, newMarker]);
+        setPendingMarker(null);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Unknown error";
+        alert(`Could not save marker: ${message}`);
+      } finally {
+        setSavingMarker(false);
+      }
     },
     [pendingMarker, layout.id, demoMode, supabase]
   );
@@ -171,17 +194,26 @@ export function VastuEditorWrapper({
       return;
     }
     setSaving(true);
-    await supabase
-      .from("layouts")
-      .update({
-        boundary,
-        center,
-        north_degrees: northDegrees,
-        viewport: { x: 0, y: 0, scale: chakraZoom },
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", layout.id);
-    setSaving(false);
+    try {
+      const { error } = await supabase
+        .from("layouts")
+        .update({
+          boundary,
+          center,
+          north_degrees: northDegrees,
+          viewport: { x: 0, y: 0, scale: chakraZoom },
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", layout.id);
+      if (error) {
+        throw new Error(error.message);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      alert(`Could not save layout: ${message}`);
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function handleSaveAndContinue() {
@@ -418,7 +450,7 @@ export function VastuEditorWrapper({
                   max={360}
                   step={1}
                   value={northDegrees}
-                  onChange={(e) => setNorthDegrees(Number(e.target.value))}
+                  onChange={(e) => setNorthDegrees(normalizeDegrees(Number(e.target.value)))}
                   className="w-48 min-w-[8rem] accent-primary"
                 />
                 <input
@@ -426,7 +458,12 @@ export function VastuEditorWrapper({
                   min={0}
                   max={360}
                   value={Math.round(northDegrees)}
-                  onChange={(e) => setNorthDegrees(Number(e.target.value) % 360)}
+                  onChange={(e) => {
+                    const nextValue = Number(e.target.value);
+                    if (Number.isFinite(nextValue)) {
+                      setNorthDegrees(normalizeDegrees(nextValue));
+                    }
+                  }}
                   className="w-14 rounded border border-surface-border px-2 py-1 text-xs text-center"
                 />
               </div>

@@ -39,7 +39,8 @@ export async function updateSession(request: NextRequest) {
 
   const isAppRoute = request.nextUrl.pathname.startsWith("/dashboard") ||
     request.nextUrl.pathname.startsWith("/project");
-  const isAuthRoute = request.nextUrl.pathname.startsWith("/auth");
+  const isAuthCallback = request.nextUrl.pathname.startsWith("/auth/callback");
+  const isAuthRoute = request.nextUrl.pathname.startsWith("/auth") && !isAuthCallback;
 
   if (!user && isAppRoute) {
     const url = request.nextUrl.clone();

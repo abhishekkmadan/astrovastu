@@ -641,44 +641,33 @@ function EditorCanvasViewport({
 
           {/* Devta marking overlay */}
           {mode === "devta-marking" && boundary.length > 2 && (() => {
-            const rotatedBoundary = boundary.map((p) => {
-              const dx = p.x - center.x;
-              const dy = p.y - center.y;
-              const rad = (northDegrees * Math.PI) / 180;
+            const rotateForImageAspect = (p: Point, degrees: number): Point => {
+              const cx = center.x * imgW;
+              const cy = center.y * imgH;
+              const dx = p.x * imgW - cx;
+              const dy = p.y * imgH - cy;
+              const rad = (degrees * Math.PI) / 180;
               return {
-                x: center.x + dx * Math.cos(rad) + dy * Math.sin(rad),
-                y: center.y - dx * Math.sin(rad) + dy * Math.cos(rad),
+                x: (cx + dx * Math.cos(rad) + dy * Math.sin(rad)) / imgW,
+                y: (cy - dx * Math.sin(rad) + dy * Math.cos(rad)) / imgH,
               };
+            };
+
+            const geometryScale = { width: imgW, height: imgH };
+            const rotatedBoundary = boundary.map((p) => {
+              return rotateForImageAspect(p, northDegrees);
             });
 
             return DEVTA_ZONES.map((zone) => {
-              const normPts = devtaZonePolygon(zone, center, rotatedBoundary);
+              const normPts = devtaZonePolygon(zone, center, rotatedBoundary, geometryScale);
               if (normPts.length < 3) return null;
 
-              const unrotatedPts = normPts.map((p) => {
-                const dx = p.x - center.x;
-                const dy = p.y - center.y;
-                const rad = (-northDegrees * Math.PI) / 180;
-                return {
-                  x: center.x + dx * Math.cos(rad) + dy * Math.sin(rad),
-                  y: center.y - dx * Math.sin(rad) + dy * Math.cos(rad),
-                };
-              });
+              const unrotatedPts = normPts.map((p) => rotateForImageAspect(p, -northDegrees));
 
               const canvasPts = unrotatedPts.map(toCanvas);
               const flatPts = canvasPts.flatMap((p) => [p.x, p.y]);
 
-              const normCentroid = polygonCentroid(normPts);
-              const unrotCentroid = (() => {
-                const dx = normCentroid.x - center.x;
-                const dy = normCentroid.y - center.y;
-                const rad = (-northDegrees * Math.PI) / 180;
-                return {
-                  x: center.x + dx * Math.cos(rad) + dy * Math.sin(rad),
-                  y: center.y - dx * Math.sin(rad) + dy * Math.cos(rad),
-                };
-              })();
-              const labelPos = toCanvas(unrotCentroid);
+              const labelPos = toCanvas(polygonCentroid(unrotatedPts));
 
               const isSelected = selectedDevta === zone.number;
               const fillColor = isSelected ? "rgba(41, 128, 185, 0.35)" : (zone.color + "80");
