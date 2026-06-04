@@ -1,13 +1,19 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { jsPDF } from "jspdf";
-import type { LayoutMarker } from "@/types/database";
+import type { Layout, LayoutMarker, Project } from "@/types/database";
+
+type PdfSection = {
+  layout: Layout;
+  markers: LayoutMarker[];
+};
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ layoutId: string }> }
 ) {
   const { layoutId } = await params;
+  const reportType = new URL(request.url).searchParams.get("type");
   const supabase = await createClient();
   const {
     data: { user },
@@ -17,26 +23,89 @@ export async function GET(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { data: layout } = await supabase
+  if (reportType === "project") {
+    const { data: project, error: projectError } = await supabase
+      .from("projects")
+      .select("*")
+      .eq("id", layoutId)
+      .eq("user_id", user.id)
+      .single();
+
+    if (projectError || !project) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+
+    const { data: layouts, error: layoutsError } = await supabase
+      .from("layouts")
+      .select("*")
+      .eq("project_id", layoutId)
+      .eq("user_id", user.id)
+      .order("created_at");
+
+    if (layoutsError) {
+      return NextResponse.json({ error: layoutsError.message }, { status: 500 });
+    }
+
+    const safeLayouts = (layouts as Layout[]) ?? [];
+    const layoutIds = safeLayouts.map((layout) => layout.id);
+    const markersByLayoutId = new Map<string, LayoutMarker[]>();
+
+    if (layoutIds.length > 0) {
+      const { data: markers, error: markersError } = await supabase
+        .from("layout_markers")
+        .select("*")
+        .in("layout_id", layoutIds)
+        .order("created_at");
+
+      if (markersError) {
+        return NextResponse.json({ error: markersError.message }, { status: 500 });
+      }
+
+      for (const marker of (markers as LayoutMarker[]) ?? []) {
+        const existing = markersByLayoutId.get(marker.layout_id) ?? [];
+        existing.push(marker);
+        markersByLayoutId.set(marker.layout_id, existing);
+      }
+    }
+
+    return pdfResponse(
+      project as Project,
+      safeLayouts.map((layout) => ({
+        layout,
+        markers: markersByLayoutId.get(layout.id) ?? [],
+      }))
+    );
+  }
+
+  const { data: layout, error: layoutError } = await supabase
     .from("layouts")
     .select("*, projects(*)")
     .eq("id", layoutId)
     .eq("user_id", user.id)
     .single();
 
-  if (!layout) {
+  if (layoutError || !layout) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  const { data: markers } = await supabase
+  const { data: markers, error: markersError } = await supabase
     .from("layout_markers")
     .select("*")
     .eq("layout_id", layoutId)
     .order("created_at");
 
+  if (markersError) {
+    return NextResponse.json({ error: markersError.message }, { status: 500 });
+  }
+
   const project = layout.projects as Record<string, string>;
   const safeMarkers: LayoutMarker[] = (markers as LayoutMarker[]) ?? [];
+  return pdfResponse(project as unknown as Project, [
+    { layout: layout as Layout, markers: safeMarkers },
+  ]);
+}
 
+function pdfResponse(project: Project, sections: PdfSection[]) {
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const pageW = doc.internal.pageSize.getWidth();
 
@@ -58,7 +127,9 @@ export async function GET(
   const details = [
     `Client: ${project?.client_name ?? "—"}`,
     `Location: ${project?.location ?? "—"}`,
-    `Layout: ${layout.name}`,
+    sections.length === 1
+      ? `Layout: ${sections[0].layout.name}`
+      : `Layouts: ${sections.length}`,
     `Type: ${project?.project_type ?? "—"}`,
     `Date: ${new Date().toLocaleDateString()}`,
   ];
@@ -66,12 +137,29 @@ export async function GET(
     doc.text(line, pageW / 2, 90 + i * 7, { align: "center" });
   });
 
-  // --- Markers Summary Page ---
-  if (safeMarkers.length > 0) {
+  for (const section of sections) {
+    addMarkersSummaryPage(doc, pageW, section);
+  }
+
+  const buffer = doc.output("arraybuffer");
+
+  return new NextResponse(buffer, {
+    headers: {
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `attachment; filename="${filenamePart(
+        project?.name
+      )}-vastu-report.pdf"`,
+    },
+  });
+}
+
+function addMarkersSummaryPage(doc: jsPDF, pageW: number, section: PdfSection) {
+  const { layout, markers } = section;
+  if (markers.length > 0) {
     doc.addPage();
     doc.setFontSize(16);
     doc.setFont("helvetica", "bold");
-    doc.text("Object Markings & Remedies", 14, 20);
+    doc.text(`${layout.name} - Object Markings & Remedies`, 14, 20);
 
     doc.setFontSize(9);
     doc.setFont("helvetica", "bold");
@@ -87,7 +175,7 @@ export async function GET(
 
     doc.setFont("helvetica", "normal");
     let y = headerY + 8;
-    for (const m of safeMarkers) {
+    for (const m of markers) {
       if (y > 270) {
         doc.addPage();
         y = 20;
@@ -110,13 +198,13 @@ export async function GET(
       y += Math.max(remedyLines.length, 1) * 5 + 3;
     }
   }
+}
 
-  const buffer = doc.output("arraybuffer");
-
-  return new NextResponse(buffer, {
-    headers: {
-      "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename="${project?.name ?? "report"}-vastu-report.pdf"`,
-    },
-  });
+function filenamePart(value: string | null | undefined) {
+  return (
+    value
+      ?.trim()
+      .replace(/[^a-z0-9_-]+/gi, "-")
+      .replace(/^-+|-+$/g, "") || "report"
+  );
 }
