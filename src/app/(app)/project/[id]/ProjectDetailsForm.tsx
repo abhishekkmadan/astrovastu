@@ -36,26 +36,45 @@ export function ProjectDetailsForm({ project }: { project: Project }) {
   const supabase = createClient();
   const [editing, setEditing] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function handleSave(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setLoading(true);
+    setError(null);
     const fd = new FormData(e.currentTarget);
-    await supabase
-      .from("projects")
-      .update({
-        name: fd.get("name") as string,
-        client_name: fd.get("client_name") as string,
-        location: fd.get("location") as string,
-        language: fd.get("language") as string,
-        project_type: fd.get("project_type") as string,
-        status: fd.get("status") as string,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", project.id);
-    setEditing(false);
-    setLoading(false);
-    router.refresh();
+    try {
+      const { error } = await supabase
+        .from("projects")
+        .update({
+          name: fd.get("name") as string,
+          client_name: fd.get("client_name") as string,
+          location: fd.get("location") as string,
+          language: fd.get("language") as string,
+          project_type: fd.get("project_type") as string,
+          status: fd.get("status") as string,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", project.id)
+        .select("id")
+        .single();
+
+      if (error) {
+        setError(`Could not save project: ${error.message}`);
+        return;
+      }
+
+      setEditing(false);
+      router.refresh();
+    } catch (error) {
+      setError(
+        `Could not save project: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -63,7 +82,10 @@ export function ProjectDetailsForm({ project }: { project: Project }) {
       <div className="flex justify-end">
         <button
           type="button"
-          onClick={() => setEditing(!editing)}
+          onClick={() => {
+            setError(null);
+            setEditing(!editing);
+          }}
           className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-white hover:bg-accent-dark"
         >
           ✎
@@ -129,12 +151,27 @@ export function ProjectDetailsForm({ project }: { project: Project }) {
           disabled
         />
       </div>
+      {error && (
+        <p
+          role="alert"
+          className="mt-4 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger"
+        >
+          {error}
+        </p>
+      )}
       {editing && (
         <div className="mt-4 flex gap-3">
           <Button type="submit" loading={loading}>
             Save
           </Button>
-          <Button type="button" variant="secondary" onClick={() => setEditing(false)}>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => {
+              setError(null);
+              setEditing(false);
+            }}
+          >
             Cancel
           </Button>
         </div>

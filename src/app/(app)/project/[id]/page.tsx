@@ -51,14 +51,26 @@ export default async function ProjectDetailPage({
           <h1 className="text-2xl font-bold text-primary">{p.name}</h1>
           <p className="text-text-muted text-sm">Client: {p.client_name}</p>
         </div>
-        <Link
-          href={`/api/pdf/${id}?type=project`}
-          target="_blank"
-          className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-dark"
-        >
-          <FileText size={16} />
-          Generate PDF
-        </Link>
+        {safeLayouts[0] ? (
+          <Link
+            href={`/api/pdf/${safeLayouts[0].id}`}
+            target="_blank"
+            className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-dark"
+          >
+            <FileText size={16} />
+            Generate PDF
+          </Link>
+        ) : (
+          <button
+            type="button"
+            disabled
+            title="Upload a floor plan before generating a PDF"
+            className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white opacity-50"
+          >
+            <FileText size={16} />
+            Generate PDF
+          </button>
+        )}
       </div>
 
       {/* Layouts and Kundlis sections */}
