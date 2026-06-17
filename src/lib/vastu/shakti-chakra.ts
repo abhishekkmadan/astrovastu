@@ -67,13 +67,21 @@ export const ZONE_16_SUBLABELS: string[] = [
 /** If length is 32, used instead of default N1–N8 / E1–E8 / … */
 export const ENTRANCE_CUSTOM_LABELS: string[] | null = null;
 
+/**
+ * Pada labels are North-centered: the slot at 0° (just clockwise of due North)
+ * is N5, and the North side (N1–N8) spans 315°–45° so the North meridian falls
+ * between N4 and N5. Slot 0 therefore maps to label index 4.
+ */
+const PADA_LABEL_OFFSET = 4;
+
 export function getDefaultEntranceLabel(index: number): string {
   if (index < 0 || index > 31) return "?";
   if (ENTRANCE_CUSTOM_LABELS && ENTRANCE_CUSTOM_LABELS.length === 32) {
     return ENTRANCE_CUSTOM_LABELS[index] ?? `?${index}`;
   }
-  const block = ["N", "E", "S", "W"][Math.floor(index / 8)] ?? "X";
-  const n = (index % 8) + 1;
+  const shifted = (index + PADA_LABEL_OFFSET) % 32;
+  const block = ["N", "E", "S", "W"][Math.floor(shifted / 8)] ?? "X";
+  const n = (shifted % 8) + 1;
   return `${block}${n}`;
 }
 

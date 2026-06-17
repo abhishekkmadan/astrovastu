@@ -455,14 +455,17 @@ function EditorCanvasViewport({
                 const rRingOuter = R * 0.88;
                 const rRingMid = R * 0.72;
                 const rPadLabel = R * 0.62;
-                const rInnerDisk = R * 0.5;
-                const ringStroke = "rgba(10,10,10,0.42)";
-                /** Minor 1° ticks (non-10°) — lighter / thinner */
-                const degMinorTick = "rgba(12,12,12,0.42)";
-                const zoneLine = "rgba(8,8,8,0.82)";
-                /** Match pada/spoke ink; single tone for every label */
-                const chakraText = { fill: zoneLine };
-
+                const ringStroke = "rgba(20,20,20,0.30)";
+                /** Degree ticks: minor (non-10°) vs 10° */
+                const degMinorTick = "rgba(20,20,20,0.30)";
+                const degMajorTick = "rgba(20,20,20,0.55)";
+                /** Spokes: 16 main solid vs intermediate dashed (main darkened ~25%) */
+                const spokeMain = "rgba(20,20,20,0.75)";
+                const spokeSub = "rgba(20,20,20,0.34)";
+                /** Lighter medium-gray ink for degree + pada labels */
+                const chakraText = { fill: "rgba(20,20,20,0.78)" };
+                /** 16-zone names darkened vs other labels */
+                const zoneText = { fill: "rgba(20,20,20,0.98)" };
                 return (
                   <>
                     {/* Transparent overlay: rim only, floor plan shows through */}
@@ -477,19 +480,19 @@ function EditorCanvasViewport({
                     />
 
                     {/* Zone structure: light rings (pada vs direction bands) */}
-                    {[rRingOuter, rRingMid, rPadLabel, rInnerDisk].map((rr) => (
+                    {[rRingOuter, rRingMid, rPadLabel].map((rr) => (
                       <Circle
                         key={`ring-${rr}`}
                         x={0}
                         y={0}
                         radius={rr}
                         stroke={ringStroke}
-                        strokeWidth={0.85}
+                        strokeWidth={0.6}
                         listening={false}
                       />
                     ))}
 
-                    {/* Outer protractor: 1° ticks; every 10° longer + bold (same ink as zone lines); numerals every 10° below */}
+                    {/* Outer protractor: 1° ticks; every 10° longer; numerals every 10° below */}
                     {Array.from({ length: 360 }).map((_, d) => {
                       const rad = navDegToRad(d);
                       const every10 = d % 10 === 0;
@@ -503,14 +506,14 @@ function EditorCanvasViewport({
                         <Line
                           key={`deg-tick-${d}`}
                           points={[x1, y1, x2, y2]}
-                          stroke={every10 ? zoneLine : degMinorTick}
-                          strokeWidth={every10 ? Math.max(1.2, R * 0.0042) : 0.52}
+                          stroke={every10 ? degMajorTick : degMinorTick}
+                          strokeWidth={every10 ? Math.max(0.9, R * 0.003) : 0.4}
                           listening={false}
                         />
                       );
                     })}
 
-                    {/* 32 pada zone lines — primary guides so users can read zones on the plan */}
+                    {/* 32 spokes: 16 main directions solid, intermediate pada lines dashed */}
                     {Array.from({ length: 32 }).map((_, j) => {
                       const rad = navDegToRad(j * 11.25);
                       const x2 = Math.cos(rad) * rFace;
@@ -520,8 +523,9 @@ function EditorCanvasViewport({
                         <Line
                           key={`spoke32-${j}`}
                           points={[0, 0, x2, y2]}
-                          stroke={zoneLine}
-                          strokeWidth={solahEdge ? Math.max(1.15, R * 0.0045) : Math.max(0.85, R * 0.003)}
+                          stroke={solahEdge ? spokeMain : spokeSub}
+                          strokeWidth={solahEdge ? Math.max(0.9, R * 0.0032) : 0.55}
+                          dash={solahEdge ? undefined : [R * 0.02, R * 0.018]}
                           listening={false}
                         />
                       );
@@ -547,7 +551,6 @@ function EditorCanvasViewport({
                           y={ty}
                           text={label}
                           fontSize={fsDeg}
-                          fontStyle="bold"
                           {...chakraText}
                           align="center"
                           verticalAlign="middle"
@@ -576,8 +579,7 @@ function EditorCanvasViewport({
                             x={lx}
                             y={ly}
                             fontSize={fs}
-                            fontStyle="bold"
-                            {...chakraText}
+                            {...zoneText}
                             align="center"
                             verticalAlign="middle"
                             rotation={midDeg + 90}
@@ -591,7 +593,7 @@ function EditorCanvasViewport({
                               x={lx}
                               y={ly + fs * 0.9}
                               fontSize={fs * 0.62}
-                              {...chakraText}
+                              {...zoneText}
                               align="center"
                               verticalAlign="middle"
                               rotation={midDeg + 90}
@@ -604,11 +606,11 @@ function EditorCanvasViewport({
                       );
                     })}
 
-                    {/* 32 pada labels (bold, slightly inward of outer pada ring) */}
+                    {/* 32 pada labels (centered in the pada band) */}
                     {Array.from({ length: 32 }).map((_, j) => {
                       const midDeg = entranceMidAngleDeg(j);
                       const mid = (midDeg * Math.PI) / 180;
-                      const rEnt = R * 0.62;
+                      const rEnt = R * 0.67;
                       const ex = Math.cos(mid) * rEnt;
                       const ey = Math.sin(mid) * rEnt;
                       const label = getDefaultEntranceLabel(j);
@@ -620,7 +622,6 @@ function EditorCanvasViewport({
                           y={ey}
                           text={label}
                           fontSize={fs}
-                          fontStyle="bold"
                           {...chakraText}
                           align="center"
                           verticalAlign="middle"
