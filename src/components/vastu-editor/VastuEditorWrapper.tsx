@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Layout, LayoutMarker, MarkerSize, Point, WorkspacePhase } from "@/types/database";
 import { VASTU_TOOLS } from "@/types/database";
 import { EditorCanvas } from "./EditorCanvas";
@@ -29,6 +29,17 @@ interface Props {
   workspacePhase?: WorkspacePhase;
 }
 
+function normalizeDegrees(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return ((value % 360) + 360) % 360;
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  return "Unexpected error";
+}
+
 export function VastuEditorWrapper({
   projectId,
   layout,
@@ -40,11 +51,13 @@ export function VastuEditorWrapper({
   // Do not create a browser Supabase client on /demo — env may be unset
   const supabase = demoMode ? null : createClient();
   const isSetupPhase = workspacePhase === "setup";
+  const saveInFlightRef = useRef(false);
+  const markerSaveInFlightRef = useRef(false);
 
   const [mode, setMode] = useState<EditorMode>("boundary");
   const [boundary, setBoundary] = useState<Point[]>(layout.boundary ?? []);
   const [center, setCenter] = useState<Point>(layout.center ?? { x: 0.5, y: 0.5 });
-  const [northDegrees, setNorthDegrees] = useState(layout.north_degrees ?? 0);
+  const [northDegrees, setNorthDegrees] = useState(normalizeDegrees(layout.north_degrees ?? 0));
   /** Scale factor for the overlay compass only (floor plan zoom is unchanged). */
   const [chakraZoom, setChakraZoom] = useState(layout.viewport?.scale ?? 1);
   const [markers, setMarkers] = useState<LayoutMarker[]>(initialMarkers);
@@ -115,6 +128,8 @@ export function VastuEditorWrapper({
   const handleSaveMarker = useCallback(
     async (remedy: string) => {
       if (!pendingMarker) return;
+      if (markerSaveInFlightRef.current) return;
+      markerSaveInFlightRef.current = true;
       setSavingMarker(true);
       const { itemLabel, kind, pos, size, verdict } = pendingMarker;
       const newId =
@@ -136,16 +151,26 @@ export function VastuEditorWrapper({
         created_at: new Date().toISOString(),
       };
 
-      if (!demoMode && supabase) {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
-        if (user) {
+      try {
+        if (!demoMode) {
+          if (!supabase) {
+            throw new Error("Supabase is not configured.");
+          }
+
+          const {
+            data: { user },
+            error: authError,
+          } = await supabase.auth.getUser();
+          if (authError) throw authError;
+          if (!user) {
+            throw new Error("Your session expired. Please sign in again.");
+          }
+
           newMarker.user_id = user.id;
           // Store size inside the jsonb position blob for round-tripping without
           // a schema change.
           const positionWithSize = { x: pos.x, y: pos.y, w: size.w, h: size.h };
-          await supabase.from("layout_markers").insert({
+          const { error } = await supabase.from("layout_markers").insert({
             id: newMarker.id,
             layout_id: layout.id,
             user_id: user.id,
@@ -156,32 +181,63 @@ export function VastuEditorWrapper({
             remedy,
             notes: verdict.explanation,
           });
+          if (error) throw error;
         }
-      }
 
-      setMarkers((prev) => [...prev, newMarker]);
-      setPendingMarker(null);
-      setSavingMarker(false);
+        setMarkers((prev) => [...prev, newMarker]);
+        setPendingMarker(null);
+      } catch (error) {
+        alert(`Could not save marker: ${getErrorMessage(error)}`);
+      } finally {
+        markerSaveInFlightRef.current = false;
+        setSavingMarker(false);
+      }
     },
     [pendingMarker, layout.id, demoMode, supabase]
   );
+
+  async function persistLayout(nextWorkspacePhase?: WorkspacePhase): Promise<boolean> {
+    if (demoMode || !supabase) {
+      return false;
+    }
+    if (saveInFlightRef.current) {
+      return false;
+    }
+
+    saveInFlightRef.current = true;
+    setSaving(true);
+    const savedNorthDegrees = normalizeDegrees(northDegrees);
+    const update = {
+      boundary,
+      center,
+      north_degrees: savedNorthDegrees,
+      viewport: { x: 0, y: 0, scale: chakraZoom },
+      updated_at: new Date().toISOString(),
+      ...(nextWorkspacePhase ? { workspace_phase: nextWorkspacePhase } : {}),
+    };
+
+    try {
+      const { error } = await supabase
+        .from("layouts")
+        .update(update)
+        .eq("id", layout.id);
+      if (error) throw error;
+      setNorthDegrees(savedNorthDegrees);
+      return true;
+    } catch (error) {
+      alert(`Could not save: ${getErrorMessage(error)}`);
+      return false;
+    } finally {
+      saveInFlightRef.current = false;
+      setSaving(false);
+    }
+  }
 
   async function handleSave() {
     if (demoMode || !supabase) {
       return;
     }
-    setSaving(true);
-    await supabase
-      .from("layouts")
-      .update({
-        boundary,
-        center,
-        north_degrees: northDegrees,
-        viewport: { x: 0, y: 0, scale: chakraZoom },
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", layout.id);
-    setSaving(false);
+    await persistLayout();
   }
 
   async function handleSaveAndContinue() {
@@ -194,24 +250,8 @@ export function VastuEditorWrapper({
       goToMode("boundary");
       return;
     }
-    setSaving(true);
-    const { error } = await supabase
-      .from("layouts")
-      .update({
-        boundary,
-        center,
-        north_degrees: northDegrees,
-        viewport: { x: 0, y: 0, scale: chakraZoom },
-        workspace_phase: "full",
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", layout.id);
-    setSaving(false);
-    if (error) {
-      alert(`Could not save: ${error.message}`);
-      return;
-    }
-    router.push(`/project/${projectId}/layout/${layout.id}/edit`);
+    const saved = await persistLayout("full");
+    if (saved) router.push(`/project/${projectId}/layout/${layout.id}/edit`);
   }
 
   return (
@@ -418,7 +458,7 @@ export function VastuEditorWrapper({
                   max={360}
                   step={1}
                   value={northDegrees}
-                  onChange={(e) => setNorthDegrees(Number(e.target.value))}
+                  onChange={(e) => setNorthDegrees(normalizeDegrees(Number(e.target.value)))}
                   className="w-48 min-w-[8rem] accent-primary"
                 />
                 <input
@@ -426,7 +466,7 @@ export function VastuEditorWrapper({
                   min={0}
                   max={360}
                   value={Math.round(northDegrees)}
-                  onChange={(e) => setNorthDegrees(Number(e.target.value) % 360)}
+                  onChange={(e) => setNorthDegrees(normalizeDegrees(Number(e.target.value)))}
                   className="w-14 rounded border border-surface-border px-2 py-1 text-xs text-center"
                 />
               </div>
