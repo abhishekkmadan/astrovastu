@@ -13,6 +13,9 @@ import { findCatalogItem } from "@/lib/vastu/object-catalog";
 import { zoneIndexForPoint } from "@/lib/vastu/zone-detect";
 import { lookupVerdict } from "@/lib/vastu/zone-verdicts";
 
+const errorMessage = (error: unknown) =>
+  error instanceof Error ? error.message : "Unknown error";
+
 export type EditorMode = "boundary" | "chakra" | "devta-marking" | "mark-objects" | "view";
 
 interface Props {
@@ -136,52 +139,96 @@ export function VastuEditorWrapper({
         created_at: new Date().toISOString(),
       };
 
-      if (!demoMode && supabase) {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
-        if (user) {
+      try {
+        if (!demoMode) {
+          if (!supabase) {
+            throw new Error("Supabase client is not available.");
+          }
+
+          const {
+            data: { user },
+            error: authError,
+          } = await supabase.auth.getUser();
+
+          if (authError) {
+            throw new Error(authError.message);
+          }
+          if (!user) {
+            throw new Error("Please sign in again before saving this marker.");
+          }
+
           newMarker.user_id = user.id;
           // Store size inside the jsonb position blob for round-tripping without
           // a schema change.
           const positionWithSize = { x: pos.x, y: pos.y, w: size.w, h: size.h };
-          await supabase.from("layout_markers").insert({
-            id: newMarker.id,
-            layout_id: layout.id,
-            user_id: user.id,
-            kind,
-            label: itemLabel,
-            position: positionWithSize,
-            verdict: verdict.verdict,
-            remedy,
-            notes: verdict.explanation,
-          });
-        }
-      }
+          const { error } = await supabase
+            .from("layout_markers")
+            .insert({
+              id: newMarker.id,
+              layout_id: layout.id,
+              user_id: user.id,
+              kind,
+              label: itemLabel,
+              position: positionWithSize,
+              verdict: verdict.verdict,
+              remedy,
+              notes: verdict.explanation,
+            })
+            .select("id")
+            .single();
 
-      setMarkers((prev) => [...prev, newMarker]);
-      setPendingMarker(null);
-      setSavingMarker(false);
+          if (error) {
+            throw new Error(error.message);
+          }
+        }
+
+        setMarkers((prev) => [...prev, newMarker]);
+        setPendingMarker(null);
+      } catch (error) {
+        alert(`Could not save marker: ${errorMessage(error)}`);
+      } finally {
+        setSavingMarker(false);
+      }
     },
     [pendingMarker, layout.id, demoMode, supabase]
   );
 
-  async function handleSave() {
-    if (demoMode || !supabase) {
-      return;
+  async function persistLayout(nextPhase?: WorkspacePhase) {
+    if (!supabase) {
+      throw new Error("Supabase client is not available.");
     }
-    setSaving(true);
-    await supabase
+
+    const { error } = await supabase
       .from("layouts")
       .update({
         boundary,
         center,
         north_degrees: northDegrees,
         viewport: { x: 0, y: 0, scale: chakraZoom },
+        ...(nextPhase ? { workspace_phase: nextPhase } : {}),
         updated_at: new Date().toISOString(),
       })
-      .eq("id", layout.id);
-    setSaving(false);
+      .eq("id", layout.id)
+      .select("id")
+      .single();
+
+    if (error) {
+      throw new Error(error.message);
+    }
+  }
+
+  async function handleSave() {
+    if (demoMode || !supabase) {
+      return;
+    }
+    setSaving(true);
+    try {
+      await persistLayout();
+    } catch (error) {
+      alert(`Could not save: ${errorMessage(error)}`);
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function handleSaveAndContinue() {
@@ -195,21 +242,13 @@ export function VastuEditorWrapper({
       return;
     }
     setSaving(true);
-    const { error } = await supabase
-      .from("layouts")
-      .update({
-        boundary,
-        center,
-        north_degrees: northDegrees,
-        viewport: { x: 0, y: 0, scale: chakraZoom },
-        workspace_phase: "full",
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", layout.id);
-    setSaving(false);
-    if (error) {
-      alert(`Could not save: ${error.message}`);
+    try {
+      await persistLayout("full");
+    } catch (error) {
+      alert(`Could not save: ${errorMessage(error)}`);
       return;
+    } finally {
+      setSaving(false);
     }
     router.push(`/project/${projectId}/layout/${layout.id}/edit`);
   }
