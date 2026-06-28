@@ -31,10 +31,12 @@ export default async function ProjectDetailPage({
     .from("layouts")
     .select("*")
     .eq("project_id", id)
+    .eq("user_id", user.id)
     .order("created_at", { ascending: false });
 
   const p = project as Project;
   const safeLayouts: Layout[] = (layouts as Layout[]) ?? [];
+  const reportLayout = safeLayouts.find((layout) => layout.workspace_phase === "full");
 
   return (
     <div>
@@ -51,14 +53,24 @@ export default async function ProjectDetailPage({
           <h1 className="text-2xl font-bold text-primary">{p.name}</h1>
           <p className="text-text-muted text-sm">Client: {p.client_name}</p>
         </div>
-        <Link
-          href={`/api/pdf/${id}?type=project`}
-          target="_blank"
-          className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-dark"
-        >
-          <FileText size={16} />
-          Generate PDF
-        </Link>
+        {reportLayout ? (
+          <Link
+            href={`/api/pdf/${reportLayout.id}`}
+            target="_blank"
+            className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-dark"
+          >
+            <FileText size={16} />
+            Generate PDF
+          </Link>
+        ) : (
+          <span
+            className="flex items-center gap-2 rounded-lg bg-surface-dim px-4 py-2 text-sm font-medium text-text-muted"
+            title="Complete layout setup before generating a PDF"
+          >
+            <FileText size={16} />
+            Generate PDF
+          </span>
+        )}
       </div>
 
       {/* Layouts and Kundlis sections */}

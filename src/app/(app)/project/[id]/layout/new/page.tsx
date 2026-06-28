@@ -43,6 +43,19 @@ export default function NewLayoutPage() {
       return;
     }
 
+    const { data: project, error: projectErr } = await supabase
+      .from("projects")
+      .select("id")
+      .eq("id", params.id)
+      .eq("user_id", user.id)
+      .single();
+
+    if (projectErr || !project) {
+      setError("Project not found");
+      setLoading(false);
+      return;
+    }
+
     const ext = file.name.split(".").pop();
     const path = `${user.id}/${params.id}/${crypto.randomUUID()}.${ext}`;
 
