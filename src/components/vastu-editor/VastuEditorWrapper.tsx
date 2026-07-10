@@ -117,36 +117,45 @@ export function VastuEditorWrapper({
       if (!pendingMarker) return;
       setSavingMarker(true);
       const { itemLabel, kind, pos, size, verdict } = pendingMarker;
-      const newId =
-        typeof crypto !== "undefined" && "randomUUID" in crypto
-          ? crypto.randomUUID()
-          : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      try {
+        if (demoMode || !supabase) {
+          const newId =
+            typeof crypto !== "undefined" && "randomUUID" in crypto
+              ? crypto.randomUUID()
+              : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+          const newMarker: LayoutMarker = {
+            id: newId,
+            layout_id: layout.id,
+            user_id: "demo",
+            kind,
+            label: itemLabel,
+            position: pos,
+            size,
+            verdict: verdict.verdict,
+            remedy,
+            notes: verdict.explanation,
+            created_at: new Date().toISOString(),
+          };
+          setMarkers((prev) => [...prev, newMarker]);
+          setPendingMarker(null);
+          return;
+        }
 
-      const newMarker: LayoutMarker = {
-        id: newId,
-        layout_id: layout.id,
-        user_id: demoMode ? "demo" : "",
-        kind,
-        label: itemLabel,
-        position: pos,
-        size,
-        verdict: verdict.verdict,
-        remedy,
-        notes: verdict.explanation,
-        created_at: new Date().toISOString(),
-      };
-
-      if (!demoMode && supabase) {
         const {
           data: { user },
+          error: userError,
         } = await supabase.auth.getUser();
-        if (user) {
-          newMarker.user_id = user.id;
-          // Store size inside the jsonb position blob for round-tripping without
-          // a schema change.
-          const positionWithSize = { x: pos.x, y: pos.y, w: size.w, h: size.h };
-          await supabase.from("layout_markers").insert({
-            id: newMarker.id,
+        if (userError || !user) {
+          alert(userError?.message ?? "Please sign in again before saving this marker.");
+          return;
+        }
+
+        // Store size inside the jsonb position blob for round-tripping without
+        // a schema change.
+        const positionWithSize = { x: pos.x, y: pos.y, w: size.w, h: size.h };
+        const { data: inserted, error } = await supabase
+          .from("layout_markers")
+          .insert({
             layout_id: layout.id,
             user_id: user.id,
             kind,
@@ -155,13 +164,25 @@ export function VastuEditorWrapper({
             verdict: verdict.verdict,
             remedy,
             notes: verdict.explanation,
-          });
-        }
-      }
+          })
+          .select("*")
+          .single();
 
-      setMarkers((prev) => [...prev, newMarker]);
-      setPendingMarker(null);
-      setSavingMarker(false);
+        if (error || !inserted) {
+          alert(`Could not save marker: ${error?.message ?? "No marker was created."}`);
+          return;
+        }
+
+        const savedMarker: LayoutMarker = {
+          ...(inserted as LayoutMarker),
+          position: pos,
+          size,
+        };
+        setMarkers((prev) => [...prev, savedMarker]);
+        setPendingMarker(null);
+      } finally {
+        setSavingMarker(false);
+      }
     },
     [pendingMarker, layout.id, demoMode, supabase]
   );
