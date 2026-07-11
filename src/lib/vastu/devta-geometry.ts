@@ -123,7 +123,7 @@ export function devtaZonePolygon(
   center: Point,
   boundary: Point[]
 ): Point[] {
-  const [innerFrac, outerFrac] = RING_RADII[zone.ring] ?? [0, 1];
+  const [innerFrac, outerFrac] = zone.radialRange ?? RING_RADII[zone.ring] ?? [0, 1];
 
   const { startAngle } = zone;
   let endAngle = zone.endAngle;

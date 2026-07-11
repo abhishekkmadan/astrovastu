@@ -28,6 +28,8 @@ export interface DevtaZone {
   code: string;
   /** Concentric ring: 0 = center, 1 = inner, 2 = middle, 3 = outer */
   ring: number;
+  /** Optional custom radial span for zones that bridge adjacent rings */
+  radialRange?: readonly [number, number];
   /** Start angle in degrees (0 = North, clockwise) */
   startAngle: number;
   /** End angle in degrees */
@@ -105,14 +107,14 @@ export const DEVTA_ZONES: DevtaZone[] = [
   { number: 37, deity: "Sugreev", title: "Grasper", code: "R9", ring: 3, startAngle: 303.75, endAngle: 326.25, color: "#f5cba7" },
 
   // ─── Corner devtas (at intercardinals, spanning Ring 2–3) ───
-  { number: 38, deity: "Pushpdant", title: "Guru", code: "R10", ring: 3, startAngle: 258.75, endAngle: 281.25, color: "#d5dbef" },
-  { number: 39, deity: "Bhringraj", title: "Cleaner", code: "a10", ring: 3, startAngle: 213.75, endAngle: 236.25, color: "#d5dbef" },
-  { number: 40, deity: "Shosha", title: "Drier", code: "a3", ring: 3, startAngle: 281.25, endAngle: 303.75, color: "#d5dbef" },
-  { number: 41, deity: "Papyakshma", title: "Addiction", code: "a4", ring: 3, startAngle: 303.75, endAngle: 326.25, color: "#d5dbef" },
-  { number: 42, deity: "Grihakshata", title: "Cruncher", code: "a8", ring: 3, startAngle: 168.75, endAngle: 191.25, color: "#d5dbef" },
-  { number: 43, deity: "Anil-Nav", title: "Navigator", code: "A12", ring: 3, startAngle: 146.25, endAngle: 168.75, color: "#d5dbef" },
-  { number: 44, deity: "Savitri", title: "Executor", code: "A2", ring: 3, startAngle: 236.25, endAngle: 258.75, color: "#d5dbef" },
-  { number: 45, deity: "Indra", title: "Chief", code: "K1", ring: 3, startAngle: 56.25, endAngle: 78.75, color: "#d5dbef" },
+  { number: 38, deity: "Pushpdant", title: "Guru", code: "R10", ring: 3, radialRange: [0.55, 0.85], startAngle: 258.75, endAngle: 281.25, color: "#d5dbef" },
+  { number: 39, deity: "Bhringraj", title: "Cleaner", code: "a10", ring: 3, radialRange: [0.55, 0.85], startAngle: 213.75, endAngle: 236.25, color: "#d5dbef" },
+  { number: 40, deity: "Shosha", title: "Drier", code: "a3", ring: 3, radialRange: [0.55, 0.85], startAngle: 281.25, endAngle: 303.75, color: "#d5dbef" },
+  { number: 41, deity: "Papyakshma", title: "Addiction", code: "a4", ring: 3, radialRange: [0.55, 0.85], startAngle: 303.75, endAngle: 326.25, color: "#d5dbef" },
+  { number: 42, deity: "Grihakshata", title: "Cruncher", code: "a8", ring: 3, radialRange: [0.55, 0.85], startAngle: 168.75, endAngle: 191.25, color: "#d5dbef" },
+  { number: 43, deity: "Anil-Nav", title: "Navigator", code: "A12", ring: 3, radialRange: [0.55, 0.85], startAngle: 146.25, endAngle: 168.75, color: "#d5dbef" },
+  { number: 44, deity: "Savitri", title: "Executor", code: "A2", ring: 3, radialRange: [0.55, 0.85], startAngle: 236.25, endAngle: 258.75, color: "#d5dbef" },
+  { number: 45, deity: "Indra", title: "Chief", code: "K1", ring: 3, radialRange: [0.55, 0.85], startAngle: 56.25, endAngle: 78.75, color: "#d5dbef" },
 ];
 
 /** Look up a devta by its 1-based number */
