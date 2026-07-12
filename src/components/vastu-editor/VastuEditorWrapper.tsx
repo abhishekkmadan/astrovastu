@@ -116,36 +116,54 @@ export function VastuEditorWrapper({
     async (remedy: string) => {
       if (!pendingMarker) return;
       setSavingMarker(true);
-      const { itemLabel, kind, pos, size, verdict } = pendingMarker;
-      const newId =
-        typeof crypto !== "undefined" && "randomUUID" in crypto
-          ? crypto.randomUUID()
-          : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      try {
+        const { itemLabel, kind, pos, size, verdict } = pendingMarker;
+        const newId =
+          typeof crypto !== "undefined" && "randomUUID" in crypto
+            ? crypto.randomUUID()
+            : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
-      const newMarker: LayoutMarker = {
-        id: newId,
-        layout_id: layout.id,
-        user_id: demoMode ? "demo" : "",
-        kind,
-        label: itemLabel,
-        position: pos,
-        size,
-        verdict: verdict.verdict,
-        remedy,
-        notes: verdict.explanation,
-        created_at: new Date().toISOString(),
-      };
+        const newMarker: LayoutMarker = {
+          id: newId,
+          layout_id: layout.id,
+          user_id: demoMode ? "demo" : "",
+          kind,
+          label: itemLabel,
+          position: pos,
+          size,
+          verdict: verdict.verdict,
+          remedy,
+          notes: verdict.explanation,
+          created_at: new Date().toISOString(),
+        };
 
-      if (!demoMode && supabase) {
+        if (demoMode || !supabase) {
+          setMarkers((prev) => [...prev, newMarker]);
+          setPendingMarker(null);
+          return;
+        }
+
         const {
           data: { user },
+          error: authError,
         } = await supabase.auth.getUser();
-        if (user) {
-          newMarker.user_id = user.id;
-          // Store size inside the jsonb position blob for round-tripping without
-          // a schema change.
-          const positionWithSize = { x: pos.x, y: pos.y, w: size.w, h: size.h };
-          await supabase.from("layout_markers").insert({
+
+        if (authError || !user) {
+          alert(
+            authError
+              ? `Could not save marker: ${authError.message}`
+              : "Could not save marker: your session has expired. Please sign in again."
+          );
+          return;
+        }
+
+        newMarker.user_id = user.id;
+        // Store size inside the jsonb position blob for round-tripping without
+        // a schema change.
+        const positionWithSize = { x: pos.x, y: pos.y, w: size.w, h: size.h };
+        const { data: savedMarker, error } = await supabase
+          .from("layout_markers")
+          .insert({
             id: newMarker.id,
             layout_id: layout.id,
             user_id: user.id,
@@ -155,33 +173,93 @@ export function VastuEditorWrapper({
             verdict: verdict.verdict,
             remedy,
             notes: verdict.explanation,
-          });
-        }
-      }
+          })
+          .select("id, created_at")
+          .single();
 
-      setMarkers((prev) => [...prev, newMarker]);
-      setPendingMarker(null);
-      setSavingMarker(false);
+        if (error || !savedMarker) {
+          alert(
+            `Could not save marker: ${
+              error?.message ?? "no marker row was saved. Please try again."
+            }`
+          );
+          return;
+        }
+
+        const createdAt = (savedMarker as { created_at?: string }).created_at;
+        setMarkers((prev) => [
+          ...prev,
+          createdAt ? { ...newMarker, created_at: createdAt } : newMarker,
+        ]);
+        setPendingMarker(null);
+      } catch (error) {
+        alert(
+          `Could not save marker: ${
+            error instanceof Error ? error.message : "unexpected error"
+          }`
+        );
+      } finally {
+        setSavingMarker(false);
+      }
     },
     [pendingMarker, layout.id, demoMode, supabase]
   );
 
-  async function handleSave() {
+  async function saveLayoutChanges(nextPhase?: WorkspacePhase) {
     if (demoMode || !supabase) {
-      return;
+      return true;
     }
+
+    const updates: {
+      boundary: Point[];
+      center: Point;
+      north_degrees: number;
+      viewport: { x: number; y: number; scale: number };
+      updated_at: string;
+      workspace_phase?: WorkspacePhase;
+    } = {
+      boundary,
+      center,
+      north_degrees: northDegrees,
+      viewport: { x: 0, y: 0, scale: chakraZoom },
+      updated_at: new Date().toISOString(),
+    };
+
+    if (nextPhase) {
+      updates.workspace_phase = nextPhase;
+    }
+
     setSaving(true);
-    await supabase
-      .from("layouts")
-      .update({
-        boundary,
-        center,
-        north_degrees: northDegrees,
-        viewport: { x: 0, y: 0, scale: chakraZoom },
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", layout.id);
-    setSaving(false);
+    try {
+      const { data, error } = await supabase
+        .from("layouts")
+        .update(updates)
+        .eq("id", layout.id)
+        .select("id")
+        .single();
+
+      if (error || !data) {
+        alert(
+          `Could not save: ${
+            error?.message ?? "no layout row was updated. Please refresh and try again."
+          }`
+        );
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      alert(
+        `Could not save: ${error instanceof Error ? error.message : "unexpected error"}`
+      );
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleSave() {
+    await saveLayoutChanges();
   }
 
   async function handleSaveAndContinue() {
@@ -194,23 +272,12 @@ export function VastuEditorWrapper({
       goToMode("boundary");
       return;
     }
-    setSaving(true);
-    const { error } = await supabase
-      .from("layouts")
-      .update({
-        boundary,
-        center,
-        north_degrees: northDegrees,
-        viewport: { x: 0, y: 0, scale: chakraZoom },
-        workspace_phase: "full",
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", layout.id);
-    setSaving(false);
-    if (error) {
-      alert(`Could not save: ${error.message}`);
+
+    const saved = await saveLayoutChanges("full");
+    if (!saved) {
       return;
     }
+
     router.push(`/project/${projectId}/layout/${layout.id}/edit`);
   }
 
