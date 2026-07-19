@@ -289,8 +289,12 @@ function EditorCanvasViewport({
       const norm = clampToImageNorm(toNormalized(pos.x, pos.y));
       const nextBoundary = [...boundary, norm];
       setBoundary(nextBoundary);
-      const centroid = getBoundaryCentroid(nextBoundary);
-      if (centroid) setCenter(centroid);
+      // Seed the centre when the boundary first becomes a polygon. Subsequent
+      // boundary edits must preserve the centre the user has confirmed.
+      if (boundary.length === 2) {
+        const centroid = getBoundaryCentroid(nextBoundary);
+        if (centroid) setCenter(centroid);
+      }
     },
     [mode, boundary, setBoundary, setCenter, toNormalized, clampToImageNorm, isInsideImage]
   );
@@ -312,8 +316,6 @@ function EditorCanvasViewport({
     const next = [...boundary];
     next[idx] = norm;
     setBoundary(next);
-    const centroid = getBoundaryCentroid(next);
-    if (centroid) setCenter(centroid);
   }
 
   function handleNodeDoubleClick(e: Konva.KonvaEventObject<MouseEvent>, idx: number) {
@@ -321,8 +323,6 @@ function EditorCanvasViewport({
     if (mode !== "boundary") return;
     const nextBoundary = boundary.filter((_, i) => i !== idx);
     setBoundary(nextBoundary);
-    const centroid = getBoundaryCentroid(nextBoundary);
-    if (centroid) setCenter(centroid);
   }
 
   const centerCanvas = toCanvas(center);
