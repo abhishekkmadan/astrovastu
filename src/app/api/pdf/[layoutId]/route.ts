@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { jsPDF } from "jspdf";
 import type { LayoutMarker } from "@/types/database";
+import { attachmentContentDisposition } from "@/lib/http/content-disposition";
 
 export async function GET(
   _request: Request,
@@ -116,7 +117,9 @@ export async function GET(
   return new NextResponse(buffer, {
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename="${project?.name ?? "report"}-vastu-report.pdf"`,
+      "Content-Disposition": attachmentContentDisposition(
+        project?.name ?? "report"
+      ),
     },
   });
 }
