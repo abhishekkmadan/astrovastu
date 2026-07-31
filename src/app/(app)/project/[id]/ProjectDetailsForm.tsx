@@ -41,21 +41,30 @@ export function ProjectDetailsForm({ project }: { project: Project }) {
     e.preventDefault();
     setLoading(true);
     const fd = new FormData(e.currentTarget);
-    await supabase
-      .from("projects")
-      .update({
-        name: fd.get("name") as string,
-        client_name: fd.get("client_name") as string,
-        location: fd.get("location") as string,
-        language: fd.get("language") as string,
-        project_type: fd.get("project_type") as string,
-        status: fd.get("status") as string,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", project.id);
-    setEditing(false);
-    setLoading(false);
-    router.refresh();
+    try {
+      const { error } = await supabase
+        .from("projects")
+        .update({
+          name: fd.get("name") as string,
+          client_name: fd.get("client_name") as string,
+          location: fd.get("location") as string,
+          language: fd.get("language") as string,
+          project_type: fd.get("project_type") as string,
+          status: fd.get("status") as string,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", project.id);
+      if (error) {
+        throw new Error(error.message);
+      }
+      setEditing(false);
+      router.refresh();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      alert(`Could not save project details: ${message}`);
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
