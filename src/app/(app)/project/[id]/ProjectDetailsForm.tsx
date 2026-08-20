@@ -36,26 +36,38 @@ export function ProjectDetailsForm({ project }: { project: Project }) {
   const supabase = createClient();
   const [editing, setEditing] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function handleSave(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setLoading(true);
+    setError(null);
     const fd = new FormData(e.currentTarget);
-    await supabase
-      .from("projects")
-      .update({
-        name: fd.get("name") as string,
-        client_name: fd.get("client_name") as string,
-        location: fd.get("location") as string,
-        language: fd.get("language") as string,
-        project_type: fd.get("project_type") as string,
-        status: fd.get("status") as string,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", project.id);
-    setEditing(false);
-    setLoading(false);
-    router.refresh();
+    try {
+      const { error: updateError } = await supabase
+        .from("projects")
+        .update({
+          name: fd.get("name") as string,
+          client_name: fd.get("client_name") as string,
+          location: fd.get("location") as string,
+          language: fd.get("language") as string,
+          project_type: fd.get("project_type") as string,
+          status: fd.get("status") as string,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", project.id);
+      if (updateError) {
+        throw new Error(updateError.message);
+      }
+
+      setEditing(false);
+      router.refresh();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -129,6 +141,11 @@ export function ProjectDetailsForm({ project }: { project: Project }) {
           disabled
         />
       </div>
+      {error && (
+        <p className="mt-3 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
+          Could not save project details: {error}
+        </p>
+      )}
       {editing && (
         <div className="mt-4 flex gap-3">
           <Button type="submit" loading={loading}>
