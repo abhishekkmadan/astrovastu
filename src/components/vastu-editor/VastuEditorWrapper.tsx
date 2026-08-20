@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Layout, LayoutMarker, MarkerSize, Point, WorkspacePhase } from "@/types/database";
 import { VASTU_TOOLS } from "@/types/database";
 import { EditorCanvas } from "./EditorCanvas";
@@ -57,6 +57,7 @@ export function VastuEditorWrapper({
   const [selectedItemKey, setSelectedItemKey] = useState<string | null>(null);
   const [pendingMarker, setPendingMarker] = useState<PendingMarker | null>(null);
   const [savingMarker, setSavingMarker] = useState(false);
+  const savingMarkerRef = useRef(false);
 
   /** Clears mark-objects UI state whenever leaving that mode (same places that call setMode). */
   const goToMode = useCallback((nextMode: EditorMode) => {
@@ -114,38 +115,54 @@ export function VastuEditorWrapper({
 
   const handleSaveMarker = useCallback(
     async (remedy: string) => {
-      if (!pendingMarker) return;
+      if (!pendingMarker || savingMarkerRef.current) return;
+      savingMarkerRef.current = true;
       setSavingMarker(true);
-      const { itemLabel, kind, pos, size, verdict } = pendingMarker;
-      const newId =
-        typeof crypto !== "undefined" && "randomUUID" in crypto
-          ? crypto.randomUUID()
-          : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      try {
+        const { itemLabel, kind, pos, size, verdict } = pendingMarker;
+        const newId =
+          typeof crypto !== "undefined" && "randomUUID" in crypto
+            ? crypto.randomUUID()
+            : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
-      const newMarker: LayoutMarker = {
-        id: newId,
-        layout_id: layout.id,
-        user_id: demoMode ? "demo" : "",
-        kind,
-        label: itemLabel,
-        position: pos,
-        size,
-        verdict: verdict.verdict,
-        remedy,
-        notes: verdict.explanation,
-        created_at: new Date().toISOString(),
-      };
+        const newMarker: LayoutMarker = {
+          id: newId,
+          layout_id: layout.id,
+          user_id: demoMode ? "demo" : "",
+          kind,
+          label: itemLabel,
+          position: pos,
+          size,
+          verdict: verdict.verdict,
+          remedy,
+          notes: verdict.explanation,
+          created_at: new Date().toISOString(),
+        };
 
-      if (!demoMode && supabase) {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
-        if (user) {
+        if (!demoMode) {
+          if (!supabase) {
+            alert("Could not save marker: Supabase is not configured.");
+            return;
+          }
+
+          const {
+            data: { user },
+            error: authError,
+          } = await supabase.auth.getUser();
+          if (authError || !user) {
+            alert(
+              `Could not save marker: ${
+                authError?.message ?? "please sign in again and retry."
+              }`
+            );
+            return;
+          }
+
           newMarker.user_id = user.id;
           // Store size inside the jsonb position blob for round-tripping without
           // a schema change.
           const positionWithSize = { x: pos.x, y: pos.y, w: size.w, h: size.h };
-          await supabase.from("layout_markers").insert({
+          const { error } = await supabase.from("layout_markers").insert({
             id: newMarker.id,
             layout_id: layout.id,
             user_id: user.id,
@@ -156,12 +173,18 @@ export function VastuEditorWrapper({
             remedy,
             notes: verdict.explanation,
           });
+          if (error) {
+            alert(`Could not save marker: ${error.message}`);
+            return;
+          }
         }
-      }
 
-      setMarkers((prev) => [...prev, newMarker]);
-      setPendingMarker(null);
-      setSavingMarker(false);
+        setMarkers((prev) => [...prev, newMarker]);
+        setPendingMarker(null);
+      } finally {
+        savingMarkerRef.current = false;
+        setSavingMarker(false);
+      }
     },
     [pendingMarker, layout.id, demoMode, supabase]
   );
@@ -171,17 +194,23 @@ export function VastuEditorWrapper({
       return;
     }
     setSaving(true);
-    await supabase
-      .from("layouts")
-      .update({
-        boundary,
-        center,
-        north_degrees: northDegrees,
-        viewport: { x: 0, y: 0, scale: chakraZoom },
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", layout.id);
-    setSaving(false);
+    try {
+      const { error } = await supabase
+        .from("layouts")
+        .update({
+          boundary,
+          center,
+          north_degrees: northDegrees,
+          viewport: { x: 0, y: 0, scale: chakraZoom },
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", layout.id);
+      if (error) {
+        alert(`Could not save: ${error.message}`);
+      }
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function handleSaveAndContinue() {
