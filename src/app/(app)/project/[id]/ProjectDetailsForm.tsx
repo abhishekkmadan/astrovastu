@@ -36,12 +36,14 @@ export function ProjectDetailsForm({ project }: { project: Project }) {
   const supabase = createClient();
   const [editing, setEditing] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function handleSave(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setLoading(true);
+    setError(null);
     const fd = new FormData(e.currentTarget);
-    await supabase
+    const { error: updateError } = await supabase
       .from("projects")
       .update({
         name: fd.get("name") as string,
@@ -53,6 +55,11 @@ export function ProjectDetailsForm({ project }: { project: Project }) {
         updated_at: new Date().toISOString(),
       })
       .eq("id", project.id);
+    if (updateError) {
+      setError(updateError.message);
+      setLoading(false);
+      return;
+    }
     setEditing(false);
     setLoading(false);
     router.refresh();
@@ -139,6 +146,7 @@ export function ProjectDetailsForm({ project }: { project: Project }) {
           </Button>
         </div>
       )}
+      {error && <p className="mt-3 text-sm text-danger">{error}</p>}
     </form>
   );
 }
