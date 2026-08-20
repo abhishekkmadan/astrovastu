@@ -35,6 +35,8 @@ export default async function ProjectDetailPage({
 
   const p = project as Project;
   const safeLayouts: Layout[] = (layouts as Layout[]) ?? [];
+  const reportLayout =
+    safeLayouts.find((layout) => layout.workspace_phase === "full") ?? safeLayouts[0];
 
   return (
     <div>
@@ -51,14 +53,25 @@ export default async function ProjectDetailPage({
           <h1 className="text-2xl font-bold text-primary">{p.name}</h1>
           <p className="text-text-muted text-sm">Client: {p.client_name}</p>
         </div>
-        <Link
-          href={`/api/pdf/${id}?type=project`}
-          target="_blank"
-          className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-dark"
-        >
-          <FileText size={16} />
-          Generate PDF
-        </Link>
+        {reportLayout ? (
+          <Link
+            href={`/api/pdf/${reportLayout.id}`}
+            target="_blank"
+            className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-dark"
+          >
+            <FileText size={16} />
+            Generate PDF
+          </Link>
+        ) : (
+          <button
+            disabled
+            title="Upload a layout before generating a PDF report"
+            className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white opacity-50 cursor-not-allowed"
+          >
+            <FileText size={16} />
+            Generate PDF
+          </button>
+        )}
       </div>
 
       {/* Layouts and Kundlis sections */}
