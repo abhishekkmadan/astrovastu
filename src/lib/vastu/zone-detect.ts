@@ -19,9 +19,10 @@ import type { Point } from "@/types/database";
 export function zoneIndexForPoint(
   marker: Point,
   center: Point,
-  northDegrees: number
+  northDegrees: number,
+  imageAspectRatio = 1
 ): number {
-  const dx = marker.x - center.x;
+  const dx = (marker.x - center.x) * imageAspectRatio;
   // screen y grows downward; negate so "up on screen" = +y in math
   const dy = -(marker.y - center.y);
 

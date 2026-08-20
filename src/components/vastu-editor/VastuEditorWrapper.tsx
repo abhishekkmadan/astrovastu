@@ -15,6 +15,10 @@ import { lookupVerdict } from "@/lib/vastu/zone-verdicts";
 
 export type EditorMode = "boundary" | "chakra" | "devta-marking" | "mark-objects" | "view";
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "Please try again.";
+}
+
 interface Props {
   projectId: string;
   layout: Layout;
@@ -93,11 +97,11 @@ export function VastuEditorWrapper({
   }, [mode, pendingMarker, selectedItemKey]);
 
   const handleMapSelect = useCallback(
-    (pos: Point, size: MarkerSize) => {
+    (pos: Point, size: MarkerSize, imageAspectRatio: number) => {
       if (!selectedItemKey) return;
       const item = findCatalogItem(selectedItemKey);
       if (!item) return;
-      const zoneIdx = zoneIndexForPoint(pos, center, northDegrees);
+      const zoneIdx = zoneIndexForPoint(pos, center, northDegrees, imageAspectRatio);
       const verdict = lookupVerdict(item.key, item.label, zoneIdx);
       setPendingMarker({
         pos,
@@ -136,16 +140,30 @@ export function VastuEditorWrapper({
         created_at: new Date().toISOString(),
       };
 
-      if (!demoMode && supabase) {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
-        if (user) {
+      try {
+        if (!demoMode) {
+          if (!supabase) {
+            alert("Could not save marker: Supabase is not configured.");
+            return;
+          }
+          const {
+            data: { user },
+            error,
+          } = await supabase.auth.getUser();
+          if (error || !user) {
+            alert(
+              `Could not save marker: ${
+                error?.message ?? "Your session has expired. Please sign in again."
+              }`
+            );
+            return;
+          }
+
           newMarker.user_id = user.id;
           // Store size inside the jsonb position blob for round-tripping without
           // a schema change.
           const positionWithSize = { x: pos.x, y: pos.y, w: size.w, h: size.h };
-          await supabase.from("layout_markers").insert({
+          const { error: insertError } = await supabase.from("layout_markers").insert({
             id: newMarker.id,
             layout_id: layout.id,
             user_id: user.id,
@@ -156,12 +174,19 @@ export function VastuEditorWrapper({
             remedy,
             notes: verdict.explanation,
           });
+          if (insertError) {
+            alert(`Could not save marker: ${insertError.message}`);
+            return;
+          }
         }
-      }
 
-      setMarkers((prev) => [...prev, newMarker]);
-      setPendingMarker(null);
-      setSavingMarker(false);
+        setMarkers((prev) => [...prev, newMarker]);
+        setPendingMarker(null);
+      } catch (error) {
+        alert(`Could not save marker: ${errorMessage(error)}`);
+      } finally {
+        setSavingMarker(false);
+      }
     },
     [pendingMarker, layout.id, demoMode, supabase]
   );
@@ -171,22 +196,30 @@ export function VastuEditorWrapper({
       return;
     }
     setSaving(true);
-    await supabase
-      .from("layouts")
-      .update({
-        boundary,
-        center,
-        north_degrees: northDegrees,
-        viewport: { x: 0, y: 0, scale: chakraZoom },
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", layout.id);
-    setSaving(false);
+    try {
+      const { error } = await supabase
+        .from("layouts")
+        .update({
+          boundary,
+          center,
+          north_degrees: northDegrees,
+          viewport: { x: 0, y: 0, scale: chakraZoom },
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", layout.id);
+      if (error) {
+        alert(`Could not save layout: ${error.message}`);
+      }
+    } catch (error) {
+      alert(`Could not save layout: ${errorMessage(error)}`);
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function handleSaveAndContinue() {
     if (demoMode || !supabase) {
-      router.push(`/project/${projectId}/layout/${layout.id}/edit`);
+      alert("Could not save layout: Supabase is not configured.");
       return;
     }
     if (boundary.length < 3) {

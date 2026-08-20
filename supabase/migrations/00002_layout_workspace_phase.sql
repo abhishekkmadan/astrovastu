@@ -8,12 +8,10 @@ alter table public.layouts
   add column if not exists workspace_phase text not null default 'setup'
     check (workspace_phase in ('setup', 'full'));
 
--- Back-fill: existing layouts (pre-phase rollout) go straight to 'full'
--- so nothing breaks for users mid-project.
+-- Back-fill only layouts that already have enough setup geometry to enter
+-- the full workspace. Incomplete rows stay in setup instead of being promoted
+-- merely because they are older than the migration transaction.
 update public.layouts
   set workspace_phase = 'full'
   where workspace_phase = 'setup'
-    and (
-      jsonb_array_length(coalesce(boundary, '[]'::jsonb)) >= 3
-      or created_at < now() - interval '1 minute'
-    );
+    and jsonb_array_length(coalesce(boundary, '[]'::jsonb)) >= 3;

@@ -51,7 +51,7 @@ interface Props {
    * Drag-to-select callback for mark-objects mode.
    * Returns the **center** of the selection and its **size** (normalized).
    */
-  onMapSelect?: (center: Point, size: MarkerSize) => void;
+  onMapSelect?: (center: Point, size: MarkerSize, imageAspectRatio: number) => void;
   /** Rectangle for the currently pending (unsaved) marker, to render on top. */
   pendingRect?: { center: Point; size: MarkerSize; verdict: "good" | "bad" | "neutral" } | null;
 }
@@ -260,7 +260,7 @@ function EditorCanvasViewport({
         w: Math.max(0.01, pxW2 / Math.max(1, pxUnitX)),
         h: Math.max(0.01, pxH2 / Math.max(1, pxUnitY)),
       };
-      onMapSelect?.(centerNorm, size);
+      onMapSelect?.(centerNorm, size, imgW / imgH);
     },
     [dragRect, clampToImageNorm, toNormalized, imgW, imgH, scale, onMapSelect]
   );
@@ -899,16 +899,22 @@ export function EditorCanvas(props: Props) {
           Double-click a point to remove. Scroll to zoom.
         </p>
       )}
-      <EditorCanvasViewport
-        key={fitSig}
-        {...props}
-        dims={dims}
-        image={image}
-        imgW={imgW}
-        imgH={imgH}
-        offset={offset}
-        fitScale={fitScale ?? 1}
-      />
+      {image && fitScale != null ? (
+        <EditorCanvasViewport
+          key={fitSig}
+          {...props}
+          dims={dims}
+          image={image}
+          imgW={imgW}
+          imgH={imgH}
+          offset={offset}
+          fitScale={fitScale}
+        />
+      ) : (
+        <div className="flex h-full w-full items-center justify-center text-sm text-text-muted">
+          Loading floor plan...
+        </div>
+      )}
     </div>
   );
 }
